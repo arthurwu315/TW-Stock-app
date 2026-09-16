@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>50檔高動能波段決策終端 (中繼測幅優化版)</title>
+  <title>50檔高動能波段決策終端 (毛刺修剪穩定版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -138,6 +138,7 @@
   </div>
 
   <script>
+    // 精選 50 檔高動能母體庫
     const UNIVERSE_50 = {
       // AI 伺服器與核心硬體 (8檔)
       '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎',
@@ -168,11 +169,12 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v2';
+    const STORAGE_KEY = 'macro_trader_universe50_v3';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
 
+    // 內存快取 (避免頻繁切換耗盡 API 額度)
     const memoryKlinesCache = {};
 
     let rawDailyKlines = [];
@@ -352,6 +354,7 @@
       renderModeUI();
     }
 
+    // 核心資料加載函式 (快取優先、730天安全查詢)
     async function loadStock(code) {
       currentCode = code;
       const name = UNIVERSE_50[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
@@ -364,7 +367,7 @@
       const select = document.getElementById('stock-select');
       if (select && select.value !== code) select.value = code;
 
-      // 1. 若有內存快取，立即 0 秒呈現
+      // 1. 若快取存在，0 秒切換，絕不打 API
       if (memoryKlinesCache[code] && memoryKlinesCache[code].length > 20) {
         renderLoadedKlines(code, memoryKlinesCache[code]);
         return;
@@ -426,36 +429,48 @@
       }, 100);
     }
 
-    // 核心中繼測幅演算：杜絕台積電等單邊狂飆股目標價失真
-    function calculateSymmetricTargets(klines, mLow, mHigh, curPrice) {
-      const trendSpan = (mHigh - mLow) / curPrice;
-      let effectiveBoxH = mHigh - mLow;
-      let baseHigh = mHigh;
-      let baseLow = mLow;
+    // =========================================================================
+    // 核心演算法：加入長上影線修剪 (Wick Shaving) 與單邊飆股中繼鎖定
+    // =========================================================================
+    function calculateSymmetricTargets(klines, curPrice) {
+      const recentSlice = klines.slice(-120);
 
-      // 若 150 天高低落差 > 25%，判定為單邊主升段斜坡，切換為近 35~40 天高檔中繼平台
-      if (trendSpan > 0.25) {
-        const localBoxSlice = klines.slice(-40);
-        const lbHigh = Math.max(...localBoxSlice.map(k => k.high));
-        const lbLow = Math.min(...localBoxSlice.map(k => k.low));
-        effectiveBoxH = Math.max(lbHigh - lbLow, curPrice * 0.08);
-        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.18); // 單波上限 18%
-        baseHigh = lbHigh;
-        baseLow = lbLow;
+      // 1. 提取實體邊界與極端針頭
+      const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
+      const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
+      const peakHigh = Math.max(...recentSlice.map(k => k.high));
+      const troughLow = Math.min(...recentSlice.map(k => k.low));
+
+      // 上影線修剪：若尖端高出實體 > 5%，以實體密集區定界，剃除假突破虛胖
+      const effectiveHigh = (peakHigh > maxBody * 1.05) ? parseFloat((maxBody * 1.02).toFixed(2)) : peakHigh;
+      const effectiveLow = (troughLow < minBody * 0.95) ? parseFloat((minBody * 0.98).toFixed(2)) : troughLow;
+
+      const macroSpan = (effectiveHigh - effectiveLow) / curPrice;
+      let baseHigh = effectiveHigh;
+      let baseLow = effectiveLow;
+      let effectiveBoxH = effectiveHigh - effectiveLow;
+
+      // 2. 中繼型態識別：若波段落差 > 25%，改取近 40 日實體中繼平台
+      if (macroSpan > 0.25 && klines.length >= 40) {
+        const localSlice = klines.slice(-40);
+        const lMaxBody = Math.max(...localSlice.map(k => Math.max(k.open, k.close)));
+        const lMinBody = Math.min(...localSlice.map(k => Math.min(k.open, k.close)));
+        const lPeak = Math.max(...localSlice.map(k => k.high));
+        const lTrough = Math.min(...localSlice.map(k => k.low));
+
+        baseHigh = (lPeak > lMaxBody * 1.04) ? parseFloat((lMaxBody * 1.015).toFixed(2)) : lPeak;
+        baseLow = (lTrough < lMinBody * 0.96) ? parseFloat((lMinBody * 0.985).toFixed(2)) : lTrough;
+
+        // 單波箱體厚度限制在 7% ~ 18%
+        effectiveBoxH = Math.max(curPrice * 0.07, Math.min(baseHigh - baseLow, curPrice * 0.18));
       } else {
-        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.25); // 常態上限 25%
+        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.22);
       }
 
       const rawT1 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
       const rawT2 = parseFloat((rawT1 + effectiveBoxH).toFixed(2));
 
-      return {
-        baseHigh,
-        baseLow,
-        boxH: effectiveBoxH,
-        rawT1,
-        rawT2
-      };
+      return { baseHigh, baseLow, boxH: effectiveBoxH, rawT1, rawT2 };
     }
 
     // 多因子動態定價演算核心
@@ -488,7 +503,7 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
-      // 天花板阻力檢驗 (防止撞牆)
+      // 天花板阻力檢驗 (歷史大頂壓制)
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -512,7 +527,7 @@
         type = '🚀 頸線動能突破/回踩';
         entry = parseFloat(mHigh.toFixed(2));
         stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-        rationale = `站穩平台頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
+        rationale = `站穩實體頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
         priority = 5;
       } else if (curPrice <= lLow * 1.035) {
         type = '🛡️ 底座止跌低吸點';
@@ -552,16 +567,12 @@
     function analyzeStockStructure(klines) {
       if (klines.length < 30) return;
 
-      const macroLookback = klines.slice(-150);
-      const mLow = Math.min(...macroLookback.map(k => k.low));
-      const mHigh = Math.max(...macroLookback.map(k => k.high));
       const curPrice = klines[klines.length - 1].close;
-
       const localSlice = klines.slice(-25);
       const lLow = Math.min(...localSlice.map(k => k.low));
 
-      // 呼叫中繼型態動態識別函式
-      const targets = calculateSymmetricTargets(klines, mLow, mHigh, curPrice);
+      // 啟用毛刺修剪後的對稱目標演算
+      const targets = calculateSymmetricTargets(klines, curPrice);
 
       currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
       currentStockStructure.macroHigh = parseFloat(targets.baseHigh.toFixed(2));
@@ -578,7 +589,7 @@
       currentStockStructure.rrRatio = plan.rr;
     }
 
-    // 50 檔高動能母體極速隊列掃描器
+    // 50 檔高動能母體隊列掃描器 (分批每組 5 檔，200ms 間隔)
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
@@ -645,13 +656,10 @@
 
           if (klines.length > 20) {
             const curClose = klines[klines.length - 1].close;
-            const lookback = klines.slice(-120);
-            const mLow = Math.min(...lookback.map(k => k.low));
-            const mHigh = Math.max(...lookback.map(k => k.high));
             const lLow = Math.min(...klines.slice(-20).map(k => k.low));
 
-            // 套用相同的中繼箱體過濾
-            const targets = calculateSymmetricTargets(klines, mLow, mHigh, curClose);
+            // 套用毛刺修剪演算
+            const targets = calculateSymmetricTargets(klines, curClose);
             const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
             const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
 
@@ -1246,7 +1254,7 @@
       runFullAutoScanner();
     }
 
-    // 啟動保護：僅載入單一預設標的，徹底告別開頁耗盡 API 額度問題
+    // 啟動保護：僅安全載入當前預設股票 (9945 潤泰新)，絕不自動併發掃描
     window.addEventListener('DOMContentLoaded', () => {
       initChart();
       renderStockSelect();
