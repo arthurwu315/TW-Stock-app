@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>多批次波段決策終端 (動態定價完整修復版)</title>
+  <title>百檔高動能波段決策終端</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -17,11 +17,9 @@
       -webkit-appearance: none;
       margin: 0;
     }
-    /* 防止手機端點擊輸入框時畫面放大跳動 */
     @media screen and (max-width: 768px) {
       input, select { font-size: 16px !important; }
     }
-    /* 平滑美化滾動條 */
     ::-webkit-scrollbar {
       width: 4px;
       height: 4px;
@@ -44,7 +42,7 @@
       <!-- 核心雙模式切換 -->
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs sm:text-sm font-bold gap-1">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold">
-          <span>🎯</span> <span>自動選股</span>
+          <span>🎯</span> <span>百檔雷達</span>
         </button>
         <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold">
           <span>💼</span> <span>持倉簿記</span>
@@ -54,7 +52,7 @@
 
     <!-- 股票選擇與時框 -->
     <div class="flex items-center gap-2">
-      <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-blue-500">
+      <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-blue-500 max-w-[150px] sm:max-w-none">
       </select>
 
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs font-bold gap-0.5">
@@ -81,10 +79,10 @@
             <button id="view-mode-FOCUS" onclick="setViewMode('FOCUS')" class="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition flex items-center gap-1 shadow-sm">
               <span>🔍</span> <span>聚焦K棒</span>
             </button>
-            <button id="view-mode-T1" onclick="setViewMode('T1')" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+            <button id="view-mode-T1" onclick="setViewMode('T1')" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
               <span>🎯</span> <span>T1視角</span>
             </button>
-            <button id="view-mode-MACRO" onclick="setViewMode('MACRO')" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+            <button id="view-mode-MACRO" onclick="setViewMode('MACRO')" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
               <span>🔭</span> <span>T2全景</span>
             </button>
           </div>
@@ -103,7 +101,7 @@
 
       <div class="relative w-full flex-1 min-h-[300px] md:min-h-0 mt-1.5 rounded-xl overflow-hidden">
         <div id="chart-box" class="w-full h-full min-h-[300px] md:min-h-0 transition-opacity duration-150"></div>
-        <!-- 畫面上方懸浮目標指引 (避開右側刻度 58px) -->
+        <!-- 畫面上方懸浮目標指引 (避開右側刻度) -->
         <div id="floating-targets" class="absolute top-2 right-14 flex flex-col gap-1.5 z-10 pointer-events-auto"></div>
       </div>
       
@@ -123,7 +121,7 @@
   <!-- 自訂股票彈窗 -->
   <div id="modal-custom" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
     <div class="bg-gray-900 border border-gray-800 w-full max-w-xs p-5 rounded-2xl space-y-3.5 shadow-2xl">
-      <h3 class="text-base font-black text-white">加入監控池</h3>
+      <h3 class="text-base font-black text-white">加入監控名單</h3>
       <div class="space-y-2.5 text-xs sm:text-sm">
         <div>
           <label class="block text-gray-400 mb-1 font-semibold">台股代號</label>
@@ -142,32 +140,50 @@
   </div>
 
   <script>
+    // 100 檔高動能、高流動性主流母體庫
+    const UNIVERSE_100 = {
+      // AI 伺服器與組裝
+      '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎', '2356': '英業達',
+      '2301': '光寶科', '3706': '神達', '8210': '勤誠', '3017': '奇鋐', '3324': '雙鴻',
+      '2376': '技嘉', '2357': '華碩',
+      // 半導體、IC 設計與先進封測
+      '2330': '台積電', '2454': '聯發科', '2303': '聯電', '3443': '創意', '3661': '世芯-KY',
+      '3034': '聯詠', '2379': '瑞昱', '3035': '智原', '2449': '京元電子', '3711': '日月光投控',
+      '6531': '愛普*', '3529': '力旺', '6415': '矽力*-KY', '3583': '辛耘', '3131': '弘塑',
+      '6187': '萬潤', '2408': '南亞科', '3037': '欣興',
+      // 重電、綠能與電纜
+      '1519': '華城', '1513': '中興電', '1504': '東元', '1514': '亞力', '1609': '大亞',
+      '1605': '華新', '6806': '森崴能源', '9958': '世紀鋼', '6443': '元晶', '6477': '迅得',
+      // 機器人、自動化與光電
+      '2359': '所羅門', '2049': '上銀', '4583': '台灣精銳', '8374': '羅昇', '2465': '麗臺',
+      '3008': '大立光', '3406': '玉晶光', '3504': '揚明光', '3374': '精材', '3450': '聯鈞',
+      '4977': '眾達-KY', '6442': '光聖',
+      // 散熱、網通與高速傳輸
+      '3653': '健策', '6278': '台表科', '2345': '智邦', '4966': '譜瑞-KY', '3533': '嘉澤',
+      '3081': '聯亞', '6285': '啟碁', '5388': '中磊', '3105': '穩懋', '2455': '全新',
+      // 航運、散裝與航空
+      '2603': '長榮', '2609': '陽明', '2615': '萬海', '2605': '新興', '2606': '裕民',
+      '2618': '長榮航', '2610': '華航', '2637': '慧洋-KY', '2617': '台航', '5609': '中菲行',
+      // PCB、載板與關鍵零組件
+      '2368': '金像電', '2383': '台光電', '6274': '台燿', '8046': '南電', '3189': '景碩',
+      '2327': '國巨', '2492': '華新科', '3026': '禾伸堂', '6213': '聯茂', '4958': '臻鼎-KY',
+      '3044': '健鼎', '2355': '敬鵬', '6191': '精成科',
+      // 波段資產與主流金融
+      '9945': '潤泰新', '2881': '富邦金', '2882': '國泰金', '2891': '中信金', '2886': '兆豐金',
+      '2885': '元大金', '5880': '合庫金', '9904': '寶成', '1402': '遠東新', '1301': '台塑',
+      '2002': '中鋼', '2105': '正新', '2207': '和泰車', '9910': '豐泰', '2912': '統一超'
+    };
+
     const defaultLedgerProfiles = {
       '9945': {
         name: '潤泰新',
         batches: [
           { id: 'b_1', cost: 26.1, shares: 63818, tag: '核心倉' }
         ]
-      },
-      '2330': {
-        name: '台積電',
-        batches: []
-      },
-      '2603': {
-        name: '長榮',
-        batches: []
-      },
-      '2317': {
-        name: '鴻海',
-        batches: []
-      },
-      '3231': {
-        name: '緯創',
-        batches: []
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_multi_batches_v4';
+    const STORAGE_KEY = 'macro_trader_universe100_v1';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -181,7 +197,7 @@
 
     let scannedOpportunities = [];
     let isScanning = false;
-    let currentViewMode = 'FOCUS'; // 預設聚焦K棒模式，保證K棒飽滿清晰
+    let currentViewMode = 'FOCUS';
 
     let currentStockStructure = {
       currentPrice: 0,
@@ -220,7 +236,6 @@
             let minP = res.priceRange.minValue;
             let maxP = res.priceRange.maxValue;
 
-            // 模式 1：【🔍 聚焦K棒】(預設) 僅以當前K棒與鄰近支撐防守定界，K棒巨大飽滿
             if (currentViewMode === 'FOCUS') {
               if (currentStockStructure.suggestedStop > 0 && currentStockStructure.suggestedStop < minP) {
                 minP = Math.min(minP, currentStockStructure.suggestedStop * 0.995);
@@ -235,39 +250,19 @@
                 },
                 margins: res.margins
               };
-            }
-            // 模式 2：【🎯 望向 T1】適度將縱軸推升至包含 T1 目標線 ($38.8)，K線依然清晰
-            else if (currentViewMode === 'T1') {
-              if (currentStockStructure.suggestedStop > 0) {
-                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.99);
-              }
-              if (currentStockStructure.t1 > 0) {
-                maxP = Math.max(maxP, currentStockStructure.t1 * 1.02);
-              }
+            } else if (currentViewMode === 'T1') {
+              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop * 0.99);
+              if (currentStockStructure.t1 > 0) maxP = Math.max(maxP, currentStockStructure.t1 * 1.02);
               return {
-                priceRange: {
-                  minValue: minP * 0.99,
-                  maxValue: maxP
-                },
+                priceRange: { minValue: minP * 0.99, maxValue: maxP },
                 margins: res.margins
               };
-            }
-            // 模式 3：【🔭 T2 全景】涵蓋全部宏觀波段與二次亞當 ($54.7)
-            else if (currentViewMode === 'MACRO') {
-              if (currentStockStructure.suggestedStop > 0) {
-                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.98);
-              }
-              if (currentStockStructure.localLow > 0) {
-                minP = Math.min(minP, currentStockStructure.localLow * 0.98);
-              }
-              if (currentStockStructure.t2 > 0) {
-                maxP = Math.max(maxP, currentStockStructure.t2 * 1.03);
-              }
+            } else if (currentViewMode === 'MACRO') {
+              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop * 0.98);
+              if (currentStockStructure.localLow > 0) minP = Math.min(minP, currentStockStructure.localLow * 0.98);
+              if (currentStockStructure.t2 > 0) maxP = Math.max(maxP, currentStockStructure.t2 * 1.03);
               return {
-                priceRange: {
-                  minValue: minP,
-                  maxValue: maxP
-                },
+                priceRange: { minValue: minP, maxValue: maxP },
                 margins: res.margins
               };
             }
@@ -342,8 +337,8 @@
       const box = document.getElementById('chart-box');
       const placeholder = document.getElementById('chart-hidden-placeholder');
       const btnText = document.getElementById('btn-chart-toggle-text');
-
       const floatBadges = document.getElementById('floating-targets');
+
       if (isChartHidden) {
         box.classList.add('hidden');
         if (floatBadges) floatBadges.classList.add('hidden');
@@ -372,12 +367,13 @@
 
     async function loadStock(code) {
       currentCode = code;
+      const name = UNIVERSE_100[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
       if (!stockProfiles[code]) {
-        stockProfiles[code] = { name: code, batches: [] };
+        stockProfiles[code] = { name, batches: [] };
       }
-      const profile = stockProfiles[code];
-      document.getElementById('chart-info').innerText = `正在讀取 ${code} ${profile.name} ...`;
+      document.getElementById('chart-info').innerText = `正在讀取 ${code} ${name} ...`;
 
+      renderStockSelect();
       const select = document.getElementById('stock-select');
       if (select && select.value !== code) select.value = code;
 
@@ -391,7 +387,6 @@
         const json = await res.json();
         if (!json.data || json.data.length === 0) throw new Error('無數據');
 
-        // 正確過濾並映射 FinMind max/min 欄位
         rawDailyKlines = json.data
           .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
           .map(d => ({
@@ -428,15 +423,11 @@
       }
     }
 
-    // =========================================================================
-    // 核心演算法：多因子動態定價引擎 (ATR + 均線 + 斐波那契 + 宏觀幾何)
-    // 徹底解決「無腦把收盤價當買點」問題
-    // =========================================================================
+    // 多因子動態定價演算核心
     function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1) {
       const len = klines.length;
       const curPrice = klines[len - 1].close;
 
-      // 1. 計算 14 日真實波幅 (ATR14)
       let trSum = 0;
       const atrPeriod = Math.min(14, len - 1);
       for (let i = len - atrPeriod; i < len; i++) {
@@ -447,12 +438,11 @@
         trSum += tr;
       }
       const atr14 = Math.max(0.1, trSum / atrPeriod);
+      const atrPct = (atr14 / curPrice) * 100;
 
-      // 2. 計算 10MA 與 20MA
       const ma10 = klines.slice(-10).reduce((sum, k) => sum + k.close, 0) / 10;
       const ma20 = klines.slice(-20).reduce((sum, k) => sum + k.close, 0) / 20;
 
-      // 3. 計算近 20 日微觀波段斐波那契回撤位
       const recentSlice = klines.slice(-20);
       const rHigh = Math.max(...recentSlice.map(k => k.high));
       const rLow = Math.min(...recentSlice.map(k => k.low));
@@ -461,65 +451,51 @@
       const fib500 = parseFloat((rHigh - 0.500 * fibDiff).toFixed(2));
       const fib618 = parseFloat((rHigh - 0.618 * fibDiff).toFixed(2));
 
+      // 檢查近 5 日日均量 (張數)
+      const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
+
       let entry = 0;
       let stop = 0;
       let type = '';
       let rationale = '';
       let priority = 1;
 
-      // --- 情境 A：突破/回踩接力段 (現價位於宏觀頸線附近) ---
       if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
         type = '🚀 頸線動能突破/回踩';
         entry = parseFloat(mHigh.toFixed(2));
         stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-        rationale = `站穩宏觀頸線 $${mHigh} 買進，設 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 假突破防洗停損`;
+        rationale = `站穩宏觀頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損`;
         priority = 5;
-      }
-      // --- 情境 B：底座共振低吸段 (現價貼近近期底座) ---
-      else if (curPrice <= lLow * 1.035) {
+      } else if (curPrice <= lLow * 1.035) {
         type = '🛡️ 底座止跌低吸點';
-        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2)); // 底座上方微幅確認掛單
+        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2));
         stop = parseFloat((lLow - 0.5 * atr14).toFixed(2));
         rationale = `測試底座 $${lLow}，於底座上方 0.3×ATR ($${entry}) 掛單，停損守破底`;
         priority = 4;
-      }
-      // --- 情境 C：上升趨勢中的均線回踩段 (多頭排列) ---
-      else if (curPrice >= ma20 && ma10 >= ma20) {
+      } else if (curPrice >= ma20 && ma10 >= ma20) {
         type = '📈 多頭均線/0.382回踩';
         const sup = Math.max(ma20, fib382);
-        if (sup < curPrice) {
-          entry = parseFloat(sup.toFixed(2));
-        } else {
-          entry = parseFloat(Math.max(ma20, fib500).toFixed(2));
-        }
-        if (entry >= curPrice) {
-          entry = parseFloat((curPrice - 0.3 * atr14).toFixed(2));
-        }
+        if (sup < curPrice) entry = parseFloat(sup.toFixed(2));
+        else entry = parseFloat(Math.max(ma20, fib500).toFixed(2));
+        if (entry >= curPrice) entry = parseFloat((curPrice - 0.3 * atr14).toFixed(2));
         stop = parseFloat(Math.min(fib618, entry - 1.0 * atr14).toFixed(2));
-        rationale = `多頭排列，預約於 20MA ($${ma20.toFixed(2)}) 或 0.382 費氏位 ($${fib382}) 支撐回踩掛單`;
+        rationale = `多頭發散，預約於 20MA ($${ma20.toFixed(2)}) 或 0.382 費氏位 ($${fib382}) 支撐掛單承接`;
         priority = 3;
-      }
-      // --- 情境 D：箱體中段整理 (絕不無腦追現價，等 0.500 黃金回撤) ---
-      else {
+      } else {
         type = '⏳ 區間震盪·回踩掛單';
-        if (fib500 < curPrice) {
-          entry = fib500;
-        } else if (fib618 < curPrice) {
-          entry = fib618;
-        } else {
-          entry = parseFloat((curPrice - 0.5 * atr14).toFixed(2));
-        }
+        if (fib500 < curPrice) entry = fib500;
+        else if (fib618 < curPrice) entry = fib618;
+        else entry = parseFloat((curPrice - 0.5 * atr14).toFixed(2));
         stop = parseFloat(Math.min(lLow, entry - 1.0 * atr14).toFixed(2));
-        rationale = `股價處於區間半山腰，拒絕追現價；預約於 0.5 費氏位 $${entry} 限價接刀`;
+        rationale = `股價處於半山腰，拒絕追高；預約於 0.5 費氏位 $${entry} 限價接刀`;
         priority = 2;
       }
 
-      // 風險與期望值
       const risk = Math.max(0.1, parseFloat((entry - stop).toFixed(2)));
       const reward = Math.max(0.1, parseFloat((t1 - entry).toFixed(2)));
       const rr = parseFloat((reward / risk).toFixed(1));
 
-      return { entry, stop, type, rationale, priority, rr };
+      return { entry, stop, type, rationale, priority, rr, avgVol5, atrPct };
     }
 
     function analyzeStockStructure(klines) {
@@ -543,7 +519,6 @@
       currentStockStructure.t1 = t1;
       currentStockStructure.t2 = t2;
 
-      // 呼叫多因子動態定價引擎
       const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, t1);
       currentStockStructure.strategyType = plan.type;
       currentStockStructure.suggestedEntry = plan.entry;
@@ -552,88 +527,110 @@
       currentStockStructure.rrRatio = plan.rr;
     }
 
+    // 併發隊列分批掃描百檔母體（Anti-429 演算法）
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
       const btn = document.getElementById('btn-run-scan');
-      if (btn) btn.innerText = '⚡ 掃描中...';
+      if (btn) btn.innerText = '⚡ 掃描中 (0%)...';
 
-      const poolCodes = Object.keys(stockProfiles);
+      // 彙整百檔母體 + 用戶自選庫存
+      const allCodesMap = { ...UNIVERSE_100 };
+      Object.keys(stockProfiles).forEach(c => {
+        allCodesMap[c] = stockProfiles[c].name;
+      });
+      const allCodes = Object.keys(allCodesMap);
+
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 250);
       const startStr = startDate.toISOString().split('T')[0];
 
-      const promises = poolCodes.map(code => {
-        const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startStr}`;
-        return fetch(url).then(r => r.json()).then(res => ({ code, data: res.data || [] })).catch(() => ({ code, data: [] }));
-      });
-
-      const results = await Promise.allSettled(promises);
+      const CHUNK_SIZE = 6;
+      const DELAY_MS = 180;
       const opportunities = [];
 
-      results.forEach(res => {
-        const code = res.value ? res.value.code : null;
-        if (!code) return;
-        const rawData = res.value.data || [];
+      for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
+        const chunk = allCodes.slice(i, i + CHUNK_SIZE);
+        const percent = Math.round((i / allCodes.length) * 100);
+        if (btn) btn.innerText = `⚡ 掃描中 (${i}/${allCodes.length})...`;
 
-        // 核心修復：正確將 FinMind max/min 映射為 high/low
-        const klines = rawData
-          .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
-          .map(d => ({
-            time: d.date,
-            open: d.open || d.close,
-            high: d.max,
-            low: d.min,
-            close: d.close,
-            volume: d.Trading_Volume || d.volume || 0
-          }));
+        const chunkPromises = chunk.map(code => {
+          const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startStr}`;
+          return fetch(url)
+            .then(r => r.json())
+            .then(res => ({ code, data: res.data || [] }))
+            .catch(() => ({ code, data: [] }));
+        });
 
-        if (klines.length > 30) {
-          const curClose = klines[klines.length - 1].close;
-          const lookback = klines.slice(-120);
-          const mLow = Math.min(...lookback.map(k => k.low));
-          const mHigh = Math.max(...lookback.map(k => k.high));
-          const lLow = Math.min(...klines.slice(-20).map(k => k.low));
+        const chunkResults = await Promise.allSettled(chunkPromises);
 
-          const boxH = mHigh - mLow;
-          const t1 = parseFloat((mHigh + boxH).toFixed(2));
-          const t2 = parseFloat((t1 + (t1 - mLow)).toFixed(2));
+        chunkResults.forEach(res => {
+          const code = res.value ? res.value.code : null;
+          if (!code) return;
+          const rawData = res.value.data || [];
 
-          const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, t1);
+          const klines = rawData
+            .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
+            .map(d => ({
+              time: d.date,
+              open: d.open || d.close,
+              high: d.max,
+              low: d.min,
+              close: d.close,
+              volume: d.Trading_Volume || d.volume || 0
+            }));
 
-          opportunities.push({
-            code,
-            name: stockProfiles[code].name,
-            currentPrice: curClose,
-            entry: plan.entry,
-            stop: plan.stop,
-            t1,
-            t2,
-            rr: plan.rr,
-            tag: plan.type,
-            priority: plan.priority,
-            score: plan.priority * 10 + plan.rr
-          });
-        } else {
-          opportunities.push({
-            code,
-            name: stockProfiles[code].name,
-            currentPrice: 0,
-            entry: 0,
-            stop: 0,
-            t1: 0,
-            t2: 0,
-            rr: 0,
-            tag: '⏳ 資料讀取中',
-            priority: 0,
-            score: 0
-          });
-        }
+          if (klines.length > 30) {
+            const curClose = klines[klines.length - 1].close;
+            const lookback = klines.slice(-120);
+            const mLow = Math.min(...lookback.map(k => k.low));
+            const mHigh = Math.max(...lookback.map(k => k.high));
+            const lLow = Math.min(...klines.slice(-20).map(k => k.low));
+
+            const boxH = mHigh - mLow;
+            const t1 = parseFloat((mHigh + boxH).toFixed(2));
+            const t2 = parseFloat((t1 + (t1 - mLow)).toFixed(2));
+
+            const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, t1);
+
+            // 過濾低量股 (5日均量 < 1200 張) 與極度牛皮股 (ATR% < 1.2%)
+            const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
+            if (!isHolding && (plan.avgVol5 < 1200 || plan.atrPct < 1.2)) {
+              return; // 自動淘汰，不佔用版面
+            }
+
+            opportunities.push({
+              code,
+              name: allCodesMap[code] || code,
+              currentPrice: curClose,
+              entry: plan.entry,
+              stop: plan.stop,
+              t1,
+              t2,
+              rr: plan.rr,
+              tag: plan.type,
+              priority: plan.priority,
+              score: plan.priority * 10 + plan.rr,
+              avgVol5: Math.round(plan.avgVol5),
+              isHolding
+            });
+          }
+        });
+
+        // 避免 API 頻率超限
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+
+      // 排序規則：庫存優先置頂，其餘按量化綜合評分與盈虧比排序
+      opportunities.sort((a, b) => {
+        if (a.isHolding && !b.isHolding) return -1;
+        if (!a.isHolding && b.isHolding) return 1;
+        return b.score - a.score;
       });
 
-      opportunities.sort((a, b) => b.score - a.score);
       scannedOpportunities = opportunities;
       isScanning = false;
+      if (btn) btn.innerText = '🔄 重新掃描';
 
       if (currentDashboardMode === 'HUNTER') {
         renderHunterMode();
@@ -664,9 +661,7 @@
       }
     }
 
-    // ==============================================================
-    // 視圖 1：【自動選股獵人模式】(顯示動態定價依據)
-    // ==============================================================
+    // 視圖 1：【百檔雷達獵人模式】
     function renderHunterMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -690,23 +685,26 @@
         <span class="text-amber-400 font-bold">● T2二次翻倍</span>
       `;
 
-      let scannerListHtml = scannedOpportunities.map((opp, idx) => `
+      let scannerListHtml = scannedOpportunities.slice(0, 15).map((opp, idx) => `
         <div onclick="switchStock('${opp.code}')" class="p-3 rounded-xl cursor-pointer transition flex items-center justify-between border ${opp.code === currentCode ? 'bg-blue-950/40 border-blue-600 shadow-md' : 'bg-gray-800/40 border-gray-800 hover:bg-gray-800/80'}">
           <div>
             <div class="flex items-center gap-2">
-              <span class="text-xs font-black px-1.5 py-0.5 rounded ${idx === 0 ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300'}">#${idx + 1}</span>
+              <span class="text-xs font-black px-1.5 py-0.5 rounded ${opp.isHolding ? 'bg-blue-600 text-white' : (idx === 0 ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300')}">
+                ${opp.isHolding ? '持倉' : '#' + (idx + 1)}
+              </span>
               <span class="font-black text-white text-sm sm:text-base">${opp.code} ${opp.name}</span>
               <span class="text-xs text-purple-300 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/50">${opp.tag.split(' ')[0]}</span>
             </div>
             <div class="text-xs text-gray-400 mt-1">
-              現價: $${opp.currentPrice > 0 ? opp.currentPrice.toFixed(2) : '--'} | 動態買點: <b class="text-purple-300">$${opp.entry > 0 ? opp.entry : '--'}</b>
+              現價: $${opp.currentPrice.toFixed(2)} | 動態買點: <b class="text-purple-300">$${opp.entry}</b>
+              <span class="text-gray-500 ml-1">(${opp.avgVol5}張/日)</span>
             </div>
           </div>
           <div class="text-right">
             <span class="text-xs bg-emerald-950 text-emerald-300 px-2 py-1 rounded-lg font-mono font-bold block border border-emerald-800">
-              R:R 1 : ${opp.rr > 0 ? opp.rr : '--'}
+              R:R 1 : ${opp.rr}
             </span>
-            <span class="text-xs text-emerald-400 block mt-1 font-semibold">T1 $${opp.t1 > 0 ? opp.t1 : '--'}</span>
+            <span class="text-xs text-emerald-400 block mt-1 font-semibold">T1 $${opp.t1}</span>
           </div>
         </div>
       `).join('');
@@ -715,7 +713,7 @@
         <div class="bg-purple-950/20 border-2 border-purple-500/70 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-sm sm:text-base flex items-center gap-1.5">
-              <span>🎯</span> <span>${currentCode} ${stockProfiles[currentCode].name} 動態定價指引</span>
+              <span>🎯</span> <span>${currentCode} ${UNIVERSE_100[currentCode] || currentCode} 動態定價指引</span>
             </span>
             <span class="text-xs bg-purple-900 text-purple-200 px-2 py-0.5 rounded-md font-bold">
               ${currentStockStructure.strategyType.split(' ')[0]}
@@ -735,9 +733,8 @@
             </div>
           </div>
 
-          <!-- 動態定價邏輯依據卡片 -->
-          <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
-            <span class="text-purple-400 font-bold block mb-0.5">💡 動態計算依據：</span>
+          <div class="bg-gray-900/80 p-2 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
+            <span class="text-purple-400 font-bold block mb-0.5">💡 動態演算依據：</span>
             ${currentStockStructure.rationale}
           </div>
 
@@ -751,14 +748,14 @@
         <div class="space-y-2 text-xs sm:text-sm">
           <div class="flex justify-between items-center border-b border-gray-800 pb-1.5">
             <span class="font-bold text-gray-300 text-xs sm:text-sm flex items-center gap-1">
-              ⚡ 潛力雷達排行 (${scannedOpportunities.length} 檔全部在列)
+              ⚡ 百檔動能篩選排行 (排除牛皮與低量股)
             </span>
             <button id="btn-run-scan" onclick="runFullAutoScanner()" class="text-xs text-blue-400 hover:text-blue-300 font-bold py-0.5 px-2 rounded-lg bg-blue-950/40 border border-blue-900">
               🔄 重新掃描
             </button>
           </div>
           <div class="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
-            ${scannerListHtml || '<div class="text-gray-500 text-center py-6">雷達連線演算中...</div>'}
+            ${scannerListHtml || '<div class="text-gray-500 text-center py-6">正在遍歷百檔母體與計算盈虧比...</div>'}
           </div>
         </div>
       `;
@@ -779,14 +776,12 @@
       `;
     }
 
-    // ==============================================================
     // 視圖 2：【持倉簿記模式】
-    // ==============================================================
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
       const legend = document.getElementById('dynamic-legend');
-      const profile = stockProfiles[currentCode] || { name: currentCode, batches: [] };
+      const profile = stockProfiles[currentCode] || { name: UNIVERSE_100[currentCode] || currentCode, batches: [] };
 
       const stop = currentStockStructure.localLow;
       const t1 = currentStockStructure.t1;
@@ -1102,12 +1097,26 @@
     function renderStockSelect() {
       const select = document.getElementById('stock-select');
       select.innerHTML = '';
-      Object.keys(stockProfiles).forEach(code => {
+
+      // 先放入所有已建倉股票
+      const myHoldingCodes = Object.keys(stockProfiles);
+      myHoldingCodes.forEach(code => {
         const opt = document.createElement('option');
         opt.value = code;
-        opt.innerText = `${code} ${stockProfiles[code].name}`;
+        opt.innerText = `💼 ${code} ${stockProfiles[code].name}`;
         if (code === currentCode) opt.selected = true;
         select.appendChild(opt);
+      });
+
+      // 放入其餘百檔池標的
+      Object.keys(UNIVERSE_100).forEach(code => {
+        if (!stockProfiles[code]) {
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.innerText = `${code} ${UNIVERSE_100[code]}`;
+          if (code === currentCode) opt.selected = true;
+          select.appendChild(opt);
+        }
       });
     }
 
@@ -1129,7 +1138,7 @@
       if (rawDailyKlines.length === 0) return;
       candleSeries.setData(aggregateKlines(rawDailyKlines, currentTimeframe));
       const map = { D: '日 K', W: '週 K', M: '月 K' };
-      document.getElementById('chart-info').innerText = `${currentCode} ${stockProfiles[currentCode].name} 【${map[currentTimeframe]}】`;
+      document.getElementById('chart-info').innerText = `${currentCode} ${UNIVERSE_100[currentCode] || currentCode} 【${map[currentTimeframe]}】`;
     }
 
     function aggregateKlines(dailyData, type) {
@@ -1162,8 +1171,9 @@
     function confirmCustomStock() {
       const code = document.getElementById('custom-code').value.trim();
       const name = document.getElementById('custom-name').value.trim();
-      if (!code || !name) return alert('請填妥資訊');
+      if (!code || !name) return alert('請填妥代號與名稱');
 
+      UNIVERSE_100[code] = name;
       stockProfiles[code] = { name, batches: [] };
       saveProfiles();
       renderStockSelect();
