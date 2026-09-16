@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>百檔高動能波段決策終端 (API防封穩定版)</title>
+  <title>50檔高動能波段決策終端</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -39,10 +39,10 @@
         ⚡ 波段決策終端
       </span>
       
-      <!-- 核心雙模式切換 -->
+      <!-- 核心模式雙切換 -->
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs sm:text-sm font-bold gap-1">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold">
-          <span>🎯</span> <span>精選雷達</span>
+          <span>🎯</span> <span>50檔雷達</span>
         </button>
         <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold">
           <span>💼</span> <span>持倉簿記</span>
@@ -50,7 +50,7 @@
       </div>
     </div>
 
-    <!-- 股票選擇與時框 (下拉選單支援百檔即選即看) -->
+    <!-- 股票選擇與時框 -->
     <div class="flex items-center gap-2">
       <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-blue-500 max-w-[150px] sm:max-w-none">
       </select>
@@ -139,46 +139,27 @@
   </div>
 
   <script>
-    // 完整 100 檔主流標的庫 (下拉選單點選即時分析)
-    const ALL_STOCKS_100 = {
-      // AI 伺服器與組裝
-      '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎', '2356': '英業達',
-      '2301': '光寶科', '3706': '神達', '8210': '勤誠', '3017': '奇鋐', '3324': '雙鴻',
-      '2376': '技嘉', '2357': '華碩',
-      // 半導體與先進製程
-      '2330': '台積電', '2454': '聯發科', '2303': '聯電', '3443': '創意', '3661': '世芯-KY',
-      '3034': '聯詠', '2379': '瑞昱', '3035': '智原', '2449': '京元電子', '3711': '日月光投控',
-      '6531': '愛普*', '3529': '力旺', '6415': '矽力*-KY', '3583': '辛耘', '3131': '弘塑',
-      '6187': '萬潤', '2408': '南亞科', '3037': '欣興',
-      // 重電、綠能
-      '1519': '華城', '1513': '中興電', '1504': '東元', '1514': '亞力', '1609': '大亞',
-      '1605': '華新', '6806': '森崴能源', '9958': '世紀鋼', '6443': '元晶', '6477': '迅得',
-      // 機器人、自動化與光電
-      '2359': '所羅門', '2049': '上銀', '4583': '台灣精銳', '8374': '羅昇', '2465': '麗臺',
-      '3008': '大立光', '3406': '玉晶光', '3504': '揚明光', '3374': '精材', '3450': '聯鈞',
-      '4977': '眾達-KY', '6442': '光聖',
-      // 散熱、網通
-      '3653': '健策', '6278': '台表科', '2345': '智邦', '4966': '譜瑞-KY', '3533': '嘉澤',
-      '3081': '聯亞', '6285': '啟碁', '5388': '中磊', '3105': '穩懋', '2455': '全新',
-      // 航運與海空
-      '2603': '長榮', '2609': '陽明', '2615': '萬海', '2605': '新興', '2606': '裕民',
-      '2618': '長榮航', '2610': '華航', '2637': '慧洋-KY', '2617': '台航', '5609': '中菲行',
-      // PCB 與關鍵電子零組件
-      '2368': '金像電', '2383': '台光電', '6274': '台燿', '8046': '南電', '3189': '景碩',
-      '2327': '國巨', '2492': '華新科', '3026': '禾伸堂', '6213': '聯茂', '4958': '臻鼎-KY',
-      '3044': '健鼎', '2355': '敬鵬', '6191': '精成科',
-      // 波段資產與主流金融
-      '9945': '潤泰新', '2881': '富邦金', '2882': '國泰金', '2891': '中信金', '2886': '兆豐金',
-      '2885': '元大金', '5880': '合庫金', '9904': '寶成', '1402': '遠東新', '1301': '台塑',
-      '2002': '中鋼', '2105': '正新', '2207': '和泰車', '9910': '豐泰', '2912': '統一超'
+    // 精選 50 檔高動能、高流動性主流母體庫
+    const UNIVERSE_50 = {
+      // AI 伺服器與核心硬體 (8檔)
+      '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎',
+      '2356': '英業達', '3017': '奇鋐', '3324': '雙鴻', '2376': '技嘉',
+      // 半導體、先進製程與 IC (12檔)
+      '2330': '台積電', '2454': '聯發科', '3443': '創意', '3661': '世芯-KY',
+      '3035': '智原', '3034': '聯詠', '3583': '辛耘', '3131': '弘塑',
+      '6187': '萬潤', '3711': '日月光投控', '3450': '聯鈞', '6442': '光聖',
+      // 重電綠能與機器人自動化 (8檔)
+      '1519': '華城', '1513': '中興電', '1514': '亞力', '1609': '大亞',
+      '2359': '所羅門', '2049': '上銀', '4583': '台灣精銳', '8374': '羅昇',
+      // 散熱、高速傳輸與載板 (10檔)
+      '3653': '健策', '2383': '台光電', '2368': '金像電', '6274': '台燿',
+      '8046': '南電', '3037': '欣興', '2345': '智邦', '3533': '嘉澤',
+      '3081': '聯亞', '4977': '眾達-KY',
+      // 航運與活躍波段資產 (12檔)
+      '2603': '長榮', '2609': '陽明', '2615': '萬海', '2618': '長榮航',
+      '9945': '潤泰新', '2881': '富邦金', '2882': '國泰金', '2891': '中信金',
+      '2886': '兆豐金', '2885': '元大金', '9904': '寶成', '2105': '正新'
     };
-
-    // 精選 22 檔高動能雷達核心池 (安全次數，1秒掃完，絕對不觸發 API 429 封鎖)
-    const RADAR_CORE_POOL = [
-      '9945', '2330', '2317', '2382', '3017', '3324', '3231', '2376', 
-      '3661', '2454', '1519', '1513', '2359', '4583', '3653', '2603', 
-      '2383', '2368', '3583', '6187', '3450', '6442'
-    ];
 
     const defaultLedgerProfiles = {
       '9945': {
@@ -189,13 +170,13 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_safe_v5';
+    const STORAGE_KEY = 'macro_trader_universe50_v1';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
 
-    // 本地快取快照 (避免重複切換時打爆 API)
-    const klineMemoryCache = {};
+    // 內存記憶體快取 (同一會話中絕不重複請求，0 延遲且極度省配額)
+    const memoryKlinesCache = {};
 
     let rawDailyKlines = [];
     let currentTimeframe = 'D';
@@ -374,10 +355,10 @@
       renderModeUI();
     }
 
-    // 核心安全獲取函式：防 429、具備快取、安全天數 (730天)
+    // 核心資料加載函式 (快取第一、獨立防護、穩定 730 天)
     async function loadStock(code) {
       currentCode = code;
-      const name = ALL_STOCKS_100[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
+      const name = UNIVERSE_50[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
       if (!stockProfiles[code]) {
         stockProfiles[code] = { name, batches: [] };
       }
@@ -387,13 +368,13 @@
       const select = document.getElementById('stock-select');
       if (select && select.value !== code) select.value = code;
 
-      // 1. 若有內存快取，直接 0 秒渲染
-      if (klineMemoryCache[code] && klineMemoryCache[code].length > 30) {
-        renderKlinesSuccess(code, klineMemoryCache[code]);
+      // 1. 若有內存快取，立即 0 秒呈現
+      if (memoryKlinesCache[code] && memoryKlinesCache[code].length > 20) {
+        renderLoadedKlines(code, memoryKlinesCache[code]);
         return;
       }
 
-      // 2. 恢復至安全查詢區間 (730 天，約 2 年，絕不觸發伺服器超載)
+      // 2. 730天安全查詢 (約 2 年數據，體積適中，絕不造成超載)
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 730);
       const startStr = startDate.toISOString().split('T')[0];
@@ -402,11 +383,11 @@
       try {
         const res = await fetch(url);
         if (!res.ok) {
-          if (res.status === 429) throw new Error('API 請求過於頻繁 (429)，請稍候 30 秒');
-          throw new Error(`連線代碼: ${res.status}`);
+          if (res.status === 429) throw new Error('API 請求過於頻繁，請稍候 30 秒');
+          throw new Error(`連線錯誤 (${res.status})`);
         }
         const json = await res.json();
-        if (!json.data || json.data.length === 0) throw new Error('API 無此股票資料');
+        if (!json.data || json.data.length === 0) throw new Error('查無數據');
 
         const klines = json.data
           .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
@@ -419,18 +400,17 @@
             volume: d.Trading_Volume || d.volume || 0
           }));
 
-        if (klines.length < 10) throw new Error('數據量不足');
+        if (klines.length < 10) throw new Error('有效K線不足');
 
-        // 存入內存快取
-        klineMemoryCache[code] = klines;
-        renderKlinesSuccess(code, klines);
+        memoryKlinesCache[code] = klines;
+        renderLoadedKlines(code, klines);
 
       } catch (err) {
         document.getElementById('chart-info').innerText = `${code} ${err.message || '載入失敗'}`;
       }
     }
 
-    function renderKlinesSuccess(code, klines) {
+    function renderLoadedKlines(code, klines) {
       rawDailyKlines = klines;
       currentStockStructure.currentPrice = rawDailyKlines[rawDailyKlines.length - 1].close;
 
@@ -480,7 +460,7 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
-      // 計算多年度歷史天花板阻力
+      // 天花板阻力檢驗
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -570,38 +550,43 @@
       currentStockStructure.rrRatio = plan.rr;
     }
 
-    // 精準安全掃描器：針對 22 檔動能核心 + 自選，1.2 秒內順暢完成，永不超載
+    // 50 檔高動能母體極速隊列掃描器 (分批每組 5 檔，間隔 200ms，徹底避開 429)
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
       const btn = document.getElementById('btn-run-scan');
-      if (btn) btn.innerText = '⚡ 掃描中...';
+      if (btn) btn.innerText = '⚡ 掃描中 (0%)...';
 
-      // 核心池 + 用戶自選/持倉
-      const targetPool = Array.from(new Set([...RADAR_CORE_POOL, ...Object.keys(stockProfiles)]));
+      // 彙整 50 檔母體 + 用戶自選/持倉
+      const allCodesMap = { ...UNIVERSE_50 };
+      Object.keys(stockProfiles).forEach(c => {
+        allCodesMap[c] = stockProfiles[c].name;
+      });
+      const allCodes = Object.keys(allCodesMap);
+
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 365);
       const startStr = startDate.toISOString().split('T')[0];
 
       const CHUNK_SIZE = 5;
-      const DELAY_MS = 250;
+      const DELAY_MS = 200;
       const opportunities = [];
 
-      for (let i = 0; i < targetPool.length; i += CHUNK_SIZE) {
-        const chunk = targetPool.slice(i, i + CHUNK_SIZE);
-        if (btn) btn.innerText = `⚡ 掃描中 (${Math.round((i/targetPool.length)*100)}%)...`;
+      for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
+        const chunk = allCodes.slice(i, i + CHUNK_SIZE);
+        const percent = Math.round((i / allCodes.length) * 100);
+        if (btn) btn.innerText = `⚡ 掃描中 (${i}/${allCodes.length})...`;
 
         const chunkPromises = chunk.map(async code => {
-          // 若有內存快取則優先使用
-          if (klineMemoryCache[code]) {
-            return { code, data: klineMemoryCache[code], isKlines: true };
+          if (memoryKlinesCache[code]) {
+            return { code, data: memoryKlinesCache[code], isCached: true };
           }
           const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startStr}`;
           try {
             const r = await fetch(url);
             if (!r.ok) return { code, data: [] };
             const res = await r.json();
-            return { code, data: res.data || [], isKlines: false };
+            return { code, data: res.data || [], isCached: false };
           } catch {
             return { code, data: [] };
           }
@@ -616,7 +601,7 @@
           const rawData = item.data;
 
           let klines = [];
-          if (item.isKlines) {
+          if (item.isCached) {
             klines = rawData;
           } else {
             klines = rawData
@@ -629,10 +614,10 @@
                 close: d.close,
                 volume: d.Trading_Volume || d.volume || 0
               }));
-            if (klines.length > 30) klineMemoryCache[code] = klines;
+            if (klines.length > 20) memoryKlinesCache[code] = klines;
           }
 
-          if (klines.length > 30) {
+          if (klines.length > 20) {
             const curClose = klines[klines.length - 1].close;
             const lookback = klines.slice(-120);
             const mLow = Math.min(...lookback.map(k => k.low));
@@ -646,17 +631,17 @@
             const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, rawT1, rawT2);
             const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
 
-            // 硬性剔除：排除華航等上方天花板壓死、極度牛皮 (ATR%<1.5%)、低量 (<1200張) 的標的
+            // 嚴格過濾：天花板壓制、牛皮低量直接排除
             if (!isHolding) {
               if (plan.isTrappedUnderCeiling && plan.rr < 3.0) return;
-              if (plan.atrPct < 1.5) return;
-              if (plan.avgVol5 < 1200) return;
-              if (plan.rr < 2.5) return;
+              if (plan.atrPct < 1.4) return;
+              if (plan.avgVol5 < 1000) return;
+              if (plan.rr < 2.0) return;
             }
 
             opportunities.push({
               code,
-              name: ALL_STOCKS_100[code] || (stockProfiles[code] ? stockProfiles[code].name : code),
+              name: allCodesMap[code] || code,
               currentPrice: curClose,
               entry: plan.entry,
               stop: plan.stop,
@@ -737,35 +722,43 @@
         <span class="text-amber-400 font-bold">● T2二次翻倍</span>
       `;
 
-      let scannerListHtml = scannedOpportunities.slice(0, 10).map((opp, idx) => `
-        <div onclick="switchStock('${opp.code}')" class="p-3 rounded-xl cursor-pointer transition flex items-center justify-between border ${opp.code === currentCode ? 'bg-blue-950/40 border-blue-600 shadow-md' : 'bg-gray-800/40 border-gray-800 hover:bg-gray-800/80'}">
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-xs font-black px-1.5 py-0.5 rounded ${opp.isHolding ? 'bg-blue-600 text-white' : (idx === 0 ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300')}">
-                ${opp.isHolding ? '持倉' : '#' + (idx + 1)}
+      // 產生清單 (狀態精確分離，杜絕假死卡頓)
+      let scannerListHtml = '';
+      if (isScanning) {
+        scannerListHtml = '<div class="text-gray-500 text-center py-6 text-xs">正在快速掃描 50 檔高動能母體與計算盈虧比...</div>';
+      } else if (scannedOpportunities.length === 0) {
+        scannerListHtml = '<div class="text-gray-500 text-center py-6 text-xs">當前母體中暫無符合高盈虧比結構之標的</div>';
+      } else {
+        scannerListHtml = scannedOpportunities.slice(0, 10).map((opp, idx) => `
+          <div onclick="switchStock('${opp.code}')" class="p-3 rounded-xl cursor-pointer transition flex items-center justify-between border ${opp.code === currentCode ? 'bg-blue-950/40 border-blue-600 shadow-md' : 'bg-gray-800/40 border-gray-800 hover:bg-gray-800/80'}">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-black px-1.5 py-0.5 rounded ${opp.isHolding ? 'bg-blue-600 text-white' : (idx === 0 ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300')}">
+                  ${opp.isHolding ? '持倉' : '#' + (idx + 1)}
+                </span>
+                <span class="font-black text-white text-sm sm:text-base">${opp.code} ${opp.name}</span>
+                <span class="text-xs text-purple-300 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/50">${opp.tag.split(' ')[0]}</span>
+              </div>
+              <div class="text-xs text-gray-400 mt-1">
+                現價: $${opp.currentPrice.toFixed(2)} | 動態買點: <b class="text-purple-300">$${opp.entry}</b>
+                <span class="text-gray-500 ml-1">(${opp.avgVol5}張/日)</span>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xs bg-emerald-950 text-emerald-300 px-2 py-1 rounded-lg font-mono font-bold block border border-emerald-800">
+                R:R 1 : ${opp.rr}
               </span>
-              <span class="font-black text-white text-sm sm:text-base">${opp.code} ${opp.name}</span>
-              <span class="text-xs text-purple-300 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/50">${opp.tag.split(' ')[0]}</span>
-            </div>
-            <div class="text-xs text-gray-400 mt-1">
-              現價: $${opp.currentPrice.toFixed(2)} | 動態買點: <b class="text-purple-300">$${opp.entry}</b>
-              <span class="text-gray-500 ml-1">(${opp.avgVol5}張/日)</span>
+              <span class="text-xs text-emerald-400 block mt-1 font-semibold">T1 $${opp.t1}</span>
             </div>
           </div>
-          <div class="text-right">
-            <span class="text-xs bg-emerald-950 text-emerald-300 px-2 py-1 rounded-lg font-mono font-bold block border border-emerald-800">
-              R:R 1 : ${opp.rr}
-            </span>
-            <span class="text-xs text-emerald-400 block mt-1 font-semibold">T1 $${opp.t1}</span>
-          </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
 
       container.innerHTML = `
         <div class="bg-purple-950/20 border-2 border-purple-500/70 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-sm sm:text-base flex items-center gap-1.5">
-              <span>🎯</span> <span>${currentCode} ${ALL_STOCKS_100[currentCode] || currentCode} 動態定價指引</span>
+              <span>🎯</span> <span>${currentCode} ${UNIVERSE_50[currentCode] || currentCode} 動態定價指引</span>
             </span>
             <span class="text-xs bg-purple-900 text-purple-200 px-2 py-0.5 rounded-md font-bold">
               ${currentStockStructure.strategyType.split(' ')[0]}
@@ -800,14 +793,14 @@
         <div class="space-y-2 text-xs sm:text-sm">
           <div class="flex justify-between items-center border-b border-gray-800 pb-1.5">
             <span class="font-bold text-gray-300 text-xs sm:text-sm flex items-center gap-1">
-              ⚡ 高動能精選雷達 (排除牛皮、低量與受阻股)
+              ⚡ 50檔精選雷達 (排除牛皮、低量與天花板受阻股)
             </span>
             <button id="btn-run-scan" onclick="runFullAutoScanner()" class="text-xs text-blue-400 hover:text-blue-300 font-bold py-0.5 px-2 rounded-lg bg-blue-950/40 border border-blue-900">
               🔄 重新掃描
             </button>
           </div>
           <div class="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
-            ${scannerListHtml || '<div class="text-gray-500 text-center py-6">正在快速掃描高動能池與計算盈虧比...</div>'}
+            ${scannerListHtml}
           </div>
         </div>
       `;
@@ -832,7 +825,7 @@
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
       const legend = document.getElementById('dynamic-legend');
-      const profile = stockProfiles[currentCode] || { name: ALL_STOCKS_100[currentCode] || currentCode, batches: [] };
+      const profile = stockProfiles[currentCode] || { name: UNIVERSE_50[currentCode] || currentCode, batches: [] };
 
       const stop = currentStockStructure.localLow;
       const t1 = currentStockStructure.t1;
@@ -1158,11 +1151,11 @@
         select.appendChild(opt);
       });
 
-      Object.keys(ALL_STOCKS_100).forEach(code => {
+      Object.keys(UNIVERSE_50).forEach(code => {
         if (!stockProfiles[code]) {
           const opt = document.createElement('option');
           opt.value = code;
-          opt.innerText = `${code} ${ALL_STOCKS_100[code]}`;
+          opt.innerText = `${code} ${UNIVERSE_50[code]}`;
           if (code === currentCode) opt.selected = true;
           select.appendChild(opt);
         }
@@ -1187,7 +1180,7 @@
       if (rawDailyKlines.length === 0) return;
       candleSeries.setData(aggregateKlines(rawDailyKlines, currentTimeframe));
       const map = { D: '日 K', W: '週 K', M: '月 K' };
-      document.getElementById('chart-info').innerText = `${currentCode} ${ALL_STOCKS_100[currentCode] || currentCode} 【${map[currentTimeframe]}】`;
+      document.getElementById('chart-info').innerText = `${currentCode} ${UNIVERSE_50[currentCode] || currentCode} 【${map[currentTimeframe]}】`;
     }
 
     function aggregateKlines(dailyData, type) {
@@ -1222,7 +1215,7 @@
       const name = document.getElementById('custom-name').value.trim();
       if (!code || !name) return alert('請填妥代號與名稱');
 
-      ALL_STOCKS_100[code] = name;
+      UNIVERSE_50[code] = name;
       stockProfiles[code] = { name, batches: [] };
       saveProfiles();
       renderStockSelect();
@@ -1235,10 +1228,10 @@
       initChart();
       renderStockSelect();
       switchStock('9945');
-      // 延遲 1.5 秒讓主股票畫面先飽滿渲染完成，再於背景低速啟動雷達掃描
+      // 延遲 1 秒待主線圖完全呈現後，再啟動 50 檔隊列掃描
       setTimeout(() => {
         runFullAutoScanner();
-      }, 1500);
+      }, 1000);
     });
   </script>
 </body>
