@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>多批次波段決策終端 (動態定價量化版)</title>
+  <title>多批次波段決策終端 (動態定價完整修復版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -17,9 +17,11 @@
       -webkit-appearance: none;
       margin: 0;
     }
+    /* 防止手機端點擊輸入框時畫面放大跳動 */
     @media screen and (max-width: 768px) {
       input, select { font-size: 16px !important; }
     }
+    /* 平滑美化滾動條 */
     ::-webkit-scrollbar {
       width: 4px;
       height: 4px;
@@ -33,7 +35,7 @@
 <body class="min-h-screen md:h-screen w-screen overflow-x-hidden md:overflow-hidden p-2.5 sm:p-3 md:p-4 flex flex-col justify-between gap-2.5 md:gap-3">
 
   <!-- 頂部操控列 -->
-  <header class="w-full bg-gray-900/90 border border-gray-800 rounded-2xl px-3 py-2.5 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+  <header class="w-full bg-gray-900/90 border border-gray-800 rounded-2xl px-3 py-2.5 flex flex-wrap items-center justify-between gap-2.5 shrink-0 shadow-lg">
     <div class="flex items-center gap-2">
       <span class="text-base sm:text-lg font-black text-white tracking-wide flex items-center gap-1.5">
         ⚡ 波段決策終端
@@ -41,10 +43,10 @@
       
       <!-- 核心雙模式切換 -->
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs sm:text-sm font-bold gap-1">
-        <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1">
+        <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold">
           <span>🎯</span> <span>自動選股</span>
         </button>
-        <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1">
+        <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold">
           <span>💼</span> <span>持倉簿記</span>
         </button>
       </div>
@@ -52,16 +54,16 @@
 
     <!-- 股票選擇與時框 -->
     <div class="flex items-center gap-2">
-      <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none">
+      <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-blue-500">
       </select>
 
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs font-bold gap-0.5">
-        <button onclick="setTimeframe('D')" id="tf-D" class="px-2 py-1 rounded-lg bg-blue-600 text-white transition">日</button>
-        <button onclick="setTimeframe('W')" id="tf-W" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white transition">週</button>
-        <button onclick="setTimeframe('M')" id="tf-M" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white transition">月</button>
+        <button onclick="setTimeframe('D')" id="tf-D" class="px-2.5 py-1 rounded-lg bg-blue-600 text-white transition">日</button>
+        <button onclick="setTimeframe('W')" id="tf-W" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition">週</button>
+        <button onclick="setTimeframe('M')" id="tf-M" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition">月</button>
       </div>
 
-      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-500 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1">
+      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1">
         <span>＋</span> <span>自選</span>
       </button>
     </div>
@@ -71,7 +73,7 @@
   <main class="w-full flex-1 grid grid-cols-1 md:grid-cols-12 gap-2.5 md:gap-3 min-h-0">
     
     <!-- 左側 K 線圖表 -->
-    <section class="md:col-span-7 lg:col-span-8 xl:col-span-8 bg-gray-900 border border-gray-800 rounded-2xl p-3 flex flex-col justify-between min-h-[360px] md:min-h-0">
+    <section class="md:col-span-7 lg:col-span-8 xl:col-span-8 bg-gray-900 border border-gray-800 rounded-2xl p-3 flex flex-col justify-between min-h-[360px] md:min-h-0 shadow-md">
       <div class="flex flex-wrap justify-between items-center text-xs sm:text-sm pb-2 border-b border-gray-800/80 gap-2 shrink-0">
         <div class="flex items-center gap-2">
           <span id="chart-info" class="font-bold text-white tracking-wide">連線中...</span>
@@ -100,7 +102,7 @@
     </section>
 
     <!-- 右側 雙模動態操作面板 -->
-    <section class="md:col-span-5 lg:col-span-4 xl:col-span-4 bg-gray-900 border border-gray-800 rounded-2xl p-3 sm:p-4 flex flex-col justify-between gap-3 overflow-y-auto">
+    <section class="md:col-span-5 lg:col-span-4 xl:col-span-4 bg-gray-900 border border-gray-800 rounded-2xl p-3 sm:p-4 flex flex-col justify-between gap-3 overflow-y-auto shadow-md">
       <div id="panel-content-container" class="space-y-3"></div>
       <div id="hud-bottom-card" class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/60 text-xs sm:text-sm space-y-1.5 mt-1"></div>
     </section>
@@ -137,9 +139,7 @@
       },
       '2330': {
         name: '台積電',
-        batches: [
-          { id: 'b_2', cost: 980.0, shares: 1000, tag: '波段倉' }
-        ]
+        batches: []
       },
       '2603': {
         name: '長榮',
@@ -155,7 +155,7 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_multi_batches_v3';
+    const STORAGE_KEY = 'macro_trader_multi_batches_v4';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -211,6 +211,7 @@
               if (currentStockStructure.t1 > 0) maxP = Math.max(maxP, currentStockStructure.t1);
               if (currentStockStructure.t2 > 0) maxP = Math.max(maxP, currentStockStructure.t2);
               if (currentStockStructure.localLow > 0) minP = Math.min(minP, currentStockStructure.localLow);
+              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop);
             }
             return {
               priceRange: {
@@ -302,10 +303,17 @@
         const json = await res.json();
         if (!json.data || json.data.length === 0) throw new Error('無數據');
 
-        rawDailyKlines = json.data.map(d => ({
-          time: d.date, open: d.open, high: d.max, low: d.min, close: d.close,
-          volume: d.Trading_Volume || d.volume || 0
-        }));
+        // 正確過濾並映射 FinMind max/min 欄位
+        rawDailyKlines = json.data
+          .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
+          .map(d => ({
+            time: d.date,
+            open: d.open || d.close,
+            high: d.max,
+            low: d.min,
+            close: d.close,
+            volume: d.Trading_Volume || d.volume || 0
+          }));
 
         currentStockStructure.currentPrice = rawDailyKlines[rawDailyKlines.length - 1].close;
 
@@ -349,7 +357,7 @@
         const tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
         trSum += tr;
       }
-      const atr14 = trSum / atrPeriod;
+      const atr14 = Math.max(0.1, trSum / atrPeriod);
 
       // 2. 計算 10MA 與 20MA
       const ma10 = klines.slice(-10).reduce((sum, k) => sum + k.close, 0) / 10;
@@ -371,9 +379,9 @@
       let priority = 1;
 
       // --- 情境 A：突破/回踩接力段 (現價位於宏觀頸線附近) ---
-      if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.06) {
-        type = '🚀 頸線突破/回踩接力';
-        entry = mHigh;
+      if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
+        type = '🚀 頸線動能突破/回踩';
+        entry = parseFloat(mHigh.toFixed(2));
         stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
         rationale = `站穩宏觀頸線 $${mHigh} 買進，設 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 假突破防洗停損`;
         priority = 5;
@@ -381,39 +389,52 @@
       // --- 情境 B：底座共振低吸段 (現價貼近近期底座) ---
       else if (curPrice <= lLow * 1.035) {
         type = '🛡️ 底座止跌低吸點';
-        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2)); // 底座小幅止跌確認掛單
+        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2)); // 底座上方微幅確認掛單
         stop = parseFloat((lLow - 0.5 * atr14).toFixed(2));
         rationale = `測試底座 $${lLow}，於底座上方 0.3×ATR ($${entry}) 掛單，停損守破底`;
         priority = 4;
       }
       // --- 情境 C：上升趨勢中的均線回踩段 (多頭排列) ---
       else if (curPrice >= ma20 && ma10 >= ma20) {
-        type = '📈 上升趨勢·MA與0.382共振位';
-        // 取 20MA 與 Fib 0.382 之支撐交會點
-        entry = parseFloat(Math.max(ma20, fib382).toFixed(2));
+        type = '📈 多頭均線/0.382回踩';
+        const sup = Math.max(ma20, fib382);
+        if (sup < curPrice) {
+          entry = parseFloat(sup.toFixed(2));
+        } else {
+          entry = parseFloat(Math.max(ma20, fib500).toFixed(2));
+        }
+        if (entry >= curPrice) {
+          entry = parseFloat((curPrice - 0.3 * atr14).toFixed(2));
+        }
         stop = parseFloat(Math.min(fib618, entry - 1.0 * atr14).toFixed(2));
-        rationale = `多頭發散，於 20MA ($${ma20.toFixed(2)}) 與 0.382 費氏位 ($${fib382}) 支撐掛單承接`;
+        rationale = `多頭排列，預約於 20MA ($${ma20.toFixed(2)}) 或 0.382 費氏位 ($${fib382}) 支撐回踩掛單`;
         priority = 3;
       }
       // --- 情境 D：箱體中段整理 (絕不無腦追現價，等 0.500 黃金回撤) ---
       else {
-        type = '⏳ 區間震盪·0.5 費氏回撤掛單';
-        entry = fib500; // 0.500 黃金回撤位
-        stop = parseFloat((fib618 - 0.5 * atr14).toFixed(2));
-        rationale = `現價在箱體中段，拒絕追高；預約於 0.5 費氏位 $${fib500} 低接，停損守 0.618 下方`;
+        type = '⏳ 區間震盪·回踩掛單';
+        if (fib500 < curPrice) {
+          entry = fib500;
+        } else if (fib618 < curPrice) {
+          entry = fib618;
+        } else {
+          entry = parseFloat((curPrice - 0.5 * atr14).toFixed(2));
+        }
+        stop = parseFloat(Math.min(lLow, entry - 1.0 * atr14).toFixed(2));
+        rationale = `股價處於區間半山腰，拒絕追現價；預約於 0.5 費氏位 $${entry} 限價接刀`;
         priority = 2;
       }
 
       // 風險與期望值
-      const risk = Math.max(0.1, entry - stop);
-      const reward = Math.max(0.1, t1 - entry);
+      const risk = Math.max(0.1, parseFloat((entry - stop).toFixed(2)));
+      const reward = Math.max(0.1, parseFloat((t1 - entry).toFixed(2)));
       const rr = parseFloat((reward / risk).toFixed(1));
 
       return { entry, stop, type, rationale, priority, rr };
     }
 
     function analyzeStockStructure(klines) {
-      if (klines.length < 60) return;
+      if (klines.length < 30) return;
 
       const macroLookback = klines.slice(-150);
       const mLow = Math.min(...macroLookback.map(k => k.low));
@@ -422,7 +443,6 @@
       const localSlice = klines.slice(-25);
       const lLow = Math.min(...localSlice.map(k => k.low));
 
-      const curPrice = klines[klines.length - 1].close;
       const boxH = mHigh - mLow;
       const t1 = parseFloat((mHigh + boxH).toFixed(2));
       const t2 = parseFloat((t1 + (t1 - mLow)).toFixed(2));
@@ -465,7 +485,19 @@
       results.forEach(res => {
         const code = res.value ? res.value.code : null;
         if (!code) return;
-        const klines = res.value.data || [];
+        const rawData = res.value.data || [];
+
+        // 核心修復：正確將 FinMind max/min 映射為 high/low
+        const klines = rawData
+          .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
+          .map(d => ({
+            time: d.date,
+            open: d.open || d.close,
+            high: d.max,
+            low: d.min,
+            close: d.close,
+            volume: d.Trading_Volume || d.volume || 0
+          }));
 
         if (klines.length > 30) {
           const curClose = klines[klines.length - 1].close;
@@ -615,7 +647,7 @@
           </div>
 
           <!-- 動態定價邏輯依據卡片 -->
-          <div class="bg-gray-900/80 p-2 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
+          <div class="bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
             <span class="text-purple-400 font-bold block mb-0.5">💡 動態計算依據：</span>
             ${currentStockStructure.rationale}
           </div>
@@ -813,9 +845,9 @@
       const profile = stockProfiles[currentCode];
       if (!profile.batches) profile.batches = [];
 
-      const defaultPrice = profile.batches.length > 0 
-        ? profile.batches[profile.batches.length - 1].cost 
-        : currentStockStructure.suggestedEntry;
+      const defaultPrice = currentStockStructure.suggestedEntry > 0 
+        ? currentStockStructure.suggestedEntry 
+        : currentStockStructure.currentPrice;
 
       const newId = 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
       profile.batches.push({
@@ -833,12 +865,16 @@
       const profile = stockProfiles[currentCode];
       if (!profile.batches) profile.batches = [];
 
+      const entryPrice = currentStockStructure.suggestedEntry > 0 
+        ? currentStockStructure.suggestedEntry 
+        : currentStockStructure.currentPrice;
+
       const newId = 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
       profile.batches.push({
         id: newId,
-        cost: currentStockStructure.suggestedEntry,
+        cost: entryPrice,
         shares: 5000,
-        tag: '動態切入'
+        tag: currentStockStructure.strategyType ? currentStockStructure.strategyType.split(' ')[0] : '動態切入'
       });
 
       saveProfiles();
@@ -921,6 +957,9 @@
         } else {
           avgCostLine.applyOptions({ price: avgCost });
         }
+      } else if (avgCostLine) {
+        candleSeries.removePriceLine(avgCostLine);
+        avgCostLine = null;
       }
 
       const t1Shares = Math.round(totalShares * 0.6);
@@ -991,8 +1030,8 @@
       currentTimeframe = tf;
       ['D', 'W', 'M'].forEach(t => {
         document.getElementById(`tf-${t}`).className = (t === tf)
-          ? 'px-2 py-1 rounded-lg bg-blue-600 text-white font-bold transition'
-          : 'px-2 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition';
+          ? 'px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition'
+          : 'px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition';
       });
       renderActiveTimeframe();
     }
@@ -1025,7 +1064,7 @@
           groups[key].close = bar.close;
         }
       });
-      return Object.values(groups);
+      return Object.values(groups).sort((a, b) => a.time.localeCompare(b.time));
     }
 
     function openModal() { document.getElementById('modal-custom').classList.remove('hidden'); }
