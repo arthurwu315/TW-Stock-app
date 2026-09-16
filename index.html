@@ -1224,15 +1224,13 @@
       runFullAutoScanner();
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-      initChart();
-      renderStockSelect();
-      switchStock('9945');
-      // 延遲 1 秒待主線圖完全呈現後，再啟動 50 檔隊列掃描
-      setTimeout(() => {
-        runFullAutoScanner();
-      }, 1000);
-    });
+// ✅ 修正後的安全寫法 (只載入當前 1 檔股票，額度消耗為 1)
+window.addEventListener('DOMContentLoaded', () => {
+  initChart();
+  renderStockSelect();
+  switchStock('9945'); // 僅載入 9945，0 負擔，永遠不封鎖
+});
+
   </script>
 </body>
 </html>
