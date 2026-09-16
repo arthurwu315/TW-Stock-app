@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>百檔高動能波段決策終端 (天花板壓制過濾版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    body {
+      background-color: #0b0e14;
+      color: #cbd5e1;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    @media screen and (max-width: 768px) {
+      input, select { font-size: 16px !important; }
+    }
+    ::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body class="min-h-screen md:h-screen w-screen overflow-x-hidden md:overflow-hidden p-2.5 sm:p-3 md:p-4 flex flex-col justify-between gap-2.5 md:gap-3">
+
+  <!-- 頂部操控列 -->
+  <header class="w-full bg-gray-900/90 border border-gray-800 rounded-2xl px-3 py-2.5 flex flex-wrap items-center justify-between gap-2.5 shrink-0 shadow-lg">
+    <div class="flex items-center gap-2">
+      <span class="text-base sm:text-lg font-black text-white tracking-wide flex items-center gap-1.5">
+        ⚡ 波段決策終端
+      </span>
+      
+      <!-- 核心雙模式切換 -->
+      <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs sm:text-sm font-bold gap-1">
+        <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold">
+          <span>🎯</span> <span>百檔雷達</span>
+        </button>
+        <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold">
+          <span>💼</span> <span>持倉簿記</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 股票選擇與時框 -->
+    <div class="flex items-center gap-2">
+      <select id="stock-select" onchange="switchStock(this.value)" class="bg-gray-800 border border-gray-700 text-white text-xs sm:text-sm rounded-xl px-2.5 py-1.5 font-bold focus:outline-none focus:border-blue-500 max-w-[150px] sm:max-w-none">
+      </select>
+
+      <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs font-bold gap-0.5">
+        <button onclick="setTimeframe('D')" id="tf-D" class="px-2.5 py-1 rounded-lg bg-blue-600 text-white transition">日</button>
+        <button onclick="setTimeframe('W')" id="tf-W" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition">週</button>
+        <button onclick="setTimeframe('M')" id="tf-M" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white transition">月</button>
+      </div>
+
+      <button onclick="openModal()" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1">
+        <span>＋</span> <span>自選</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- 主工作區 -->
+  <main class="w-full flex-1 grid grid-cols-1 md:grid-cols-12 gap-2.5 md:gap-3 min-h-0">
+    
+    <!-- 左側 K 線圖表 -->
+    <section class="md:col-span-7 lg:col-span-8 xl:col-span-8 bg-gray-900 border border-gray-800 rounded-2xl p-3 flex flex-col justify-between min-h-[360px] md:min-h-0 shadow-md">
+      <div class="flex flex-wrap justify-between items-center text-xs sm:text-sm pb-2 border-b border-gray-800/80 gap-2 shrink-0">
+        <div class="flex items-center gap-2">
+          <span id="chart-info" class="font-bold text-white tracking-wide">連線中...</span>
+          <div class="flex bg-gray-950 p-0.5 rounded-xl border border-gray-800 text-[11px] font-bold">
+            <button id="view-mode-FOCUS" onclick="setViewMode('FOCUS')" class="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition flex items-center gap-1 shadow-sm">
+              <span>🔍</span> <span>聚焦K棒</span>
+            </button>
+            <button id="view-mode-T1" onclick="setViewMode('T1')" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+              <span>🎯</span> <span>T1視角</span>
+            </button>
+            <button id="view-mode-MACRO" onclick="setViewMode('MACRO')" class="px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+              <span>🔭</span> <span>T2全景</span>
+            </button>
+          </div>
+          <button id="btn-chart-toggle" onclick="toggleChartDisplay()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded-lg text-xs font-semibold border border-gray-700">
+            👁️ <span id="btn-chart-toggle-text">隱藏</span>
+          </button>
+          <div class="flex items-center gap-1.5 bg-gray-950 px-2 py-1 rounded-lg border border-gray-800 text-xs">
+            <span class="text-gray-400">透明度</span>
+            <input type="range" min="10" max="100" value="100" oninput="changeChartOpacity(this.value)" class="w-14 sm:w-16 h-1.5 accent-blue-500 cursor-pointer" />
+            <span id="chart-opacity-val" class="text-gray-400 w-7 text-right">100%</span>
+          </div>
+        </div>
+
+        <div id="dynamic-legend" class="flex flex-wrap gap-2 text-xs font-semibold"></div>
+      </div>
+
+      <div class="relative w-full flex-1 min-h-[300px] md:min-h-0 mt-1.5 rounded-xl overflow-hidden">
+        <div id="chart-box" class="w-full h-full min-h-[300px] md:min-h-0 transition-opacity duration-150"></div>
+        <div id="floating-targets" class="absolute top-2 right-14 flex flex-col gap-1.5 z-10 pointer-events-auto"></div>
+      </div>
+      
+      <div id="chart-hidden-placeholder" class="hidden w-full flex-1 flex flex-col items-center justify-center text-gray-500 gap-2 border border-dashed border-gray-800 py-12">
+        <span class="text-3xl">👁️‍🗨️</span>
+        <span class="text-sm">線圖已隱藏 · 專注水位決策</span>
+      </div>
+    </section>
+
+    <!-- 右側 雙模動態操作面板 -->
+    <section class="md:col-span-5 lg:col-span-4 xl:col-span-4 bg-gray-900 border border-gray-800 rounded-2xl p-3 sm:p-4 flex flex-col justify-between gap-3 overflow-y-auto shadow-md">
+      <div id="panel-content-container" class="space-y-3"></div>
+      <div id="hud-bottom-card" class="bg-gray-800/40 p-3 rounded-xl border border-gray-700/60 text-xs sm:text-sm space-y-1.5 mt-1"></div>
+    </section>
+  </main>
+
+  <!-- 自訂股票彈窗 -->
+  <div id="modal-custom" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-gray-900 border border-gray-800 w-full max-w-xs p-5 rounded-2xl space-y-3.5 shadow-2xl">
+      <h3 class="text-base font-black text-white">加入自選清單</h3>
+      <div class="space-y-2.5 text-xs sm:text-sm">
+        <div>
+          <label class="block text-gray-400 mb-1 font-semibold">台股代號</label>
+          <input id="custom-code" type="text" placeholder="例: 2454" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white uppercase outline-none focus:border-blue-500 font-bold" />
+        </div>
+        <div>
+          <label class="block text-gray-400 mb-1 font-semibold">股票名稱</label>
+          <input id="custom-name" type="text" placeholder="例: 聯發科" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white outline-none focus:border-blue-500 font-bold" />
+        </div>
+      </div>
+      <div class="flex gap-2 pt-1">
+        <button onclick="closeModal()" class="flex-1 py-2 text-xs sm:text-sm text-gray-400 bg-gray-800 rounded-xl font-bold">取消</button>
+        <button onclick="confirmCustomStock()" class="flex-1 py-2 text-xs sm:text-sm bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold">加入</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 100 檔高動能、高流動性主流母體庫 (涵蓋主要強勢族群)
+    const UNIVERSE_100 = {
+      // AI 伺服器與組裝
+      '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎', '2356': '英業達',
+      '2301': '光寶科', '3706': '神達', '8210': '勤誠', '3017': '奇鋐', '3324': '雙鴻',
+      '2376': '技嘉', '2357': '華碩',
+      // 半導體、IC 設計與先進封測
+      '2330': '台積電', '2454': '聯發科', '2303': '聯電', '3443': '創意', '3661': '世芯-KY',
+      '3034': '聯詠', '2379': '瑞昱', '3035': '智原', '2449': '京元電子', '3711': '日月光投控',
+      '6531': '愛普*', '3529': '力旺', '6415': '矽力*-KY', '3583': '辛耘', '3131': '弘塑',
+      '6187': '萬潤', '2408': '南亞科', '3037': '欣興',
+      // 重電、綠能與電纜
+      '1519': '華城', '1513': '中興電', '1504': '東元', '1514': '亞力', '1609': '大亞',
+      '1605': '華新', '6806': '森崴能源', '9958': '世紀鋼', '6443': '元晶', '6477': '迅得',
+      // 機器人、自動化與光電
+      '2359': '所羅門', '2049': '上銀', '4583': '台灣精銳', '8374': '羅昇', '2465': '麗臺',
+      '3008': '大立光', '3406': '玉晶光', '3504': '揚明光', '3374': '精材', '3450': '聯鈞',
+      '4977': '眾達-KY', '6442': '光聖',
+      // 散熱、網通與高速傳輸
+      '3653': '健策', '6278': '台表科', '2345': '智邦', '4966': '譜瑞-KY', '3533': '嘉澤',
+      '3081': '聯亞', '6285': '啟碁', '5388': '中磊', '3105': '穩懋', '2455': '全新',
+      // 航運、散裝與航空
+      '2603': '長榮', '2609': '陽明', '2615': '萬海', '2605': '新興', '2606': '裕民',
+      '2618': '長榮航', '2610': '華航', '2637': '慧洋-KY', '2617': '台航', '5609': '中菲行',
+      // PCB、載板與關鍵零組件
+      '2368': '金像電', '2383': '台光電', '6274': '台燿', '8046': '南電', '3189': '景碩',
+      '2327': '國巨', '2492': '華新科', '3026': '禾伸堂', '6213': '聯茂', '4958': '臻鼎-KY',
+      '3044': '健鼎', '2355': '敬鵬', '6191': '精成科',
+      // 波段資產與主流金融
+      '9945': '潤泰新', '2881': '富邦金', '2882': '國泰金', '2891': '中信金', '2886': '兆豐金',
+      '2885': '元大金', '5880': '合庫金', '9904': '寶成', '1402': '遠東新', '1301': '台塑',
+      '2002': '中鋼', '2105': '正新', '2207': '和泰車', '9910': '豐泰', '2912': '統一超'
+    };
+
+    const defaultLedgerProfiles = {
+      '9945': {
+        name: '潤泰新',
+        batches: [
+          { id: 'b_1', cost: 26.1, shares: 63818, tag: '核心倉' }
+        ]
+      }
+    };
+
+    const STORAGE_KEY = 'macro_trader_universe100_v2';
+    let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
+    let currentCode = '9945';
+    let currentDashboardMode = 'HUNTER';
+
+    let rawDailyKlines = [];
+    let currentTimeframe = 'D';
+    let chart, candleSeries;
+    let activePriceLines = [];
+    let avgCostLine = null;
+    let isChartHidden = false;
+
+    let scannedOpportunities = [];
+    let isScanning = false;
+    let currentViewMode = 'FOCUS';
+
+    let currentStockStructure = {
+      currentPrice: 0,
+      macroLow: 0,
+      macroHigh: 0,
+      localLow: 0,
+      boxH: 0,
+      t1: 0,
+      t2: 0,
+      strategyType: '',
+      suggestedEntry: 0,
+      suggestedStop: 0,
+      rrRatio: 0,
+      rationale: ''
+    };
+
+    function initChart() {
+      const box = document.getElementById('chart-box');
+      chart = LightweightCharts.createChart(box, {
+        width: box.clientWidth,
+        height: box.clientHeight || 400,
+        layout: { background: { color: '#0b0e14' }, textColor: '#64748b' },
+        grid: { vertLines: { color: '#161e2e' }, horzLines: { color: '#161e2e' } },
+        rightPriceScale: { borderColor: '#334155' },
+        timeScale: { borderColor: '#334155' },
+        handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+        handleScale: { axisPressedMouseMove: true, mouseWheel: true, pinch: true }
+      });
+
+      candleSeries = chart.addCandlestickSeries({
+        upColor: '#ef4444', downColor: '#22c55e', borderVisible: false,
+        wickUpColor: '#ef4444', wickDownColor: '#22c55e',
+        autoscaleInfoProvider: (original) => {
+          const res = original();
+          if (res !== null && res.priceRange !== null) {
+            let minP = res.priceRange.minValue;
+            let maxP = res.priceRange.maxValue;
+
+            if (currentViewMode === 'FOCUS') {
+              if (currentStockStructure.suggestedStop > 0 && currentStockStructure.suggestedStop < minP) {
+                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.995);
+              }
+              if (currentStockStructure.suggestedEntry > 0 && currentStockStructure.suggestedEntry > maxP) {
+                maxP = Math.max(maxP, currentStockStructure.suggestedEntry * 1.005);
+              }
+              return {
+                priceRange: {
+                  minValue: minP * 0.99,
+                  maxValue: maxP * 1.01
+                },
+                margins: res.margins
+              };
+            } else if (currentViewMode === 'T1') {
+              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop * 0.99);
+              if (currentStockStructure.t1 > 0) maxP = Math.max(maxP, currentStockStructure.t1 * 1.02);
+              return {
+                priceRange: { minValue: minP * 0.99, maxValue: maxP },
+                margins: res.margins
+              };
+            } else if (currentViewMode === 'MACRO') {
+              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop * 0.98);
+              if (currentStockStructure.localLow > 0) minP = Math.min(minP, currentStockStructure.localLow * 0.98);
+              if (currentStockStructure.t2 > 0) maxP = Math.max(maxP, currentStockStructure.t2 * 1.03);
+              return {
+                priceRange: { minValue: minP, maxValue: maxP },
+                margins: res.margins
+              };
+            }
+          }
+          return res;
+        }
+      });
+
+      window.addEventListener('resize', () => {
+        if (chart && box && !isChartHidden) {
+          chart.applyOptions({ width: box.clientWidth, height: box.clientHeight });
+        }
+      });
+    }
+
+    function changeChartOpacity(val) {
+      document.getElementById('chart-box').style.opacity = val / 100;
+      document.getElementById('chart-opacity-val').innerText = `${val}%`;
+    }
+
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      ['FOCUS', 'T1', 'MACRO'].forEach(m => {
+        const btn = document.getElementById(`view-mode-${m}`);
+        if (btn) {
+          btn.className = (m === mode)
+            ? 'px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition flex items-center gap-1 shadow-sm'
+            : 'px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1';
+        }
+      });
+
+      updateFloatingBadges();
+
+      if (candleSeries && chart) {
+        candleSeries.applyOptions({});
+        chart.priceScale('right').applyOptions({ autoScale: true });
+      }
+    }
+
+    function updateFloatingBadges() {
+      const container = document.getElementById('floating-targets');
+      if (!container) return;
+
+      const t1 = currentStockStructure.t1;
+      const t2 = currentStockStructure.t2;
+
+      if (currentViewMode === 'FOCUS') {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <button onclick="setViewMode('T1')" class="bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600/80 text-emerald-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🎯 望向 T1 ($${t1})</span> <span class="text-xs">↗</span>
+          </button>
+          <button onclick="setViewMode('MACRO')" class="bg-amber-950/90 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🏆 望向 T2 ($${t2})</span> <span class="text-xs">↗</span>
+          </button>
+        `;
+      } else if (currentViewMode === 'T1') {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <button onclick="setViewMode('MACRO')" class="bg-amber-950/90 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🏆 望向 T2 ($${t2})</span> <span class="text-xs">↗</span>
+          </button>
+        `;
+      } else {
+        container.classList.add('hidden');
+        container.innerHTML = '';
+      }
+    }
+
+    function toggleChartDisplay() {
+      isChartHidden = !isChartHidden;
+      const box = document.getElementById('chart-box');
+      const placeholder = document.getElementById('chart-hidden-placeholder');
+      const btnText = document.getElementById('btn-chart-toggle-text');
+      const floatBadges = document.getElementById('floating-targets');
+
+      if (isChartHidden) {
+        box.classList.add('hidden');
+        if (floatBadges) floatBadges.classList.add('hidden');
+        placeholder.classList.remove('hidden');
+        btnText.innerText = '顯示';
+      } else {
+        box.classList.remove('hidden');
+        if (floatBadges) updateFloatingBadges();
+        placeholder.classList.add('hidden');
+        btnText.innerText = '隱藏';
+        if (chart && box) chart.applyOptions({ width: box.clientWidth, height: box.clientHeight });
+      }
+    }
+
+    function setDashboardMode(mode) {
+      currentDashboardMode = mode;
+      document.getElementById('tab-HUNTER').className = (mode === 'HUNTER')
+        ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold'
+        : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold';
+      document.getElementById('tab-PORTFOLIO').className = (mode === 'PORTFOLIO')
+        ? 'px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold'
+        : 'px-3 py-1.5 rounded-lg text-gray-400 hover:text-white transition flex items-center gap-1 font-bold';
+      
+      renderModeUI();
+    }
+
+    async function loadStock(code) {
+      currentCode = code;
+      const name = UNIVERSE_100[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
+      if (!stockProfiles[code]) {
+        stockProfiles[code] = { name, batches: [] };
+      }
+      document.getElementById('chart-info').innerText = `正在讀取 ${code} ${name} ...`;
+
+      renderStockSelect();
+      const select = document.getElementById('stock-select');
+      if (select && select.value !== code) select.value = code;
+
+      // 核心升級：獲取 1800 天 (~5年) 數據，徹底解決月 K 太短的問題
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 1800);
+      const startStr = startDate.toISOString().split('T')[0];
+      const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startStr}`;
+
+      try {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!json.data || json.data.length === 0) throw new Error('無數據');
+
+        rawDailyKlines = json.data
+          .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
+          .map(d => ({
+            time: d.date,
+            open: d.open || d.close,
+            high: d.max,
+            low: d.min,
+            close: d.close,
+            volume: d.Trading_Volume || d.volume || 0
+          }));
+
+        currentStockStructure.currentPrice = rawDailyKlines[rawDailyKlines.length - 1].close;
+
+        analyzeStockStructure(rawDailyKlines);
+        renderActiveTimeframe();
+        renderModeUI();
+
+        updateFloatingBadges();
+        if (candleSeries && chart) {
+          candleSeries.applyOptions({});
+          chart.priceScale('right').applyOptions({ autoScale: true });
+        }
+
+        if (scannedOpportunities.length === 0) {
+          runFullAutoScanner();
+        }
+
+        setTimeout(() => {
+          const box = document.getElementById('chart-box');
+          if (!isChartHidden) chart.applyOptions({ width: box.clientWidth, height: box.clientHeight });
+        }, 100);
+      } catch (err) {
+        document.getElementById('chart-info').innerText = `${code} 載入失敗`;
+      }
+    }
+
+    // 多因子動態定價演算核心 (含歷史天花板壓制校正)
+    function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2) {
+      const len = klines.length;
+      const curPrice = klines[len - 1].close;
+
+      let trSum = 0;
+      const atrPeriod = Math.min(14, len - 1);
+      for (let i = len - atrPeriod; i < len; i++) {
+        const h = klines[i].high;
+        const l = klines[i].low;
+        const prevC = klines[i - 1].close;
+        const tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+        trSum += tr;
+      }
+      const atr14 = Math.max(0.1, trSum / atrPeriod);
+      const atrPct = (atr14 / curPrice) * 100;
+
+      const ma10 = klines.slice(-10).reduce((sum, k) => sum + k.close, 0) / 10;
+      const ma20 = klines.slice(-20).reduce((sum, k) => sum + k.close, 0) / 20;
+
+      const recentSlice = klines.slice(-20);
+      const rHigh = Math.max(...recentSlice.map(k => k.high));
+      const rLow = Math.min(...recentSlice.map(k => k.low));
+      const fibDiff = rHigh - rLow;
+      const fib382 = parseFloat((rHigh - 0.382 * fibDiff).toFixed(2));
+      const fib500 = parseFloat((rHigh - 0.500 * fibDiff).toFixed(2));
+      const fib618 = parseFloat((rHigh - 0.618 * fibDiff).toFixed(2));
+
+      const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
+
+      // 計算多年度歷史天花板阻力
+      const hMultiYear = Math.max(...klines.map(k => k.high));
+      const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
+
+      // 若撞上多年天花板，目標強制修正為天花板前緣，絕不盲目翻到外太空
+      let finalT1 = t1;
+      let finalT2 = t2;
+      let ceilingWarning = '';
+
+      if (isTrappedUnderCeiling) {
+        finalT1 = parseFloat((hMultiYear * 0.96).toFixed(2));
+        finalT2 = parseFloat(hMultiYear.toFixed(2));
+        ceilingWarning = ` (⚠️ 上方受制多年大頂 $${hMultiYear}，已壓制為真實目標)`;
+      }
+
+      let entry = 0;
+      let stop = 0;
+      let type = '';
+      let rationale = '';
+      let priority = 1;
+
+      if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
+        type = '🚀 頸線動能突破/回踩';
+        entry = parseFloat(mHigh.toFixed(2));
+        stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
+        rationale = `站穩宏觀頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
+        priority = 5;
+      } else if (curPrice <= lLow * 1.035) {
+        type = '🛡️ 底座止跌低吸點';
+        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2));
+        stop = parseFloat((lLow - 0.5 * atr14).toFixed(2));
+        rationale = `測試底座 $${lLow}，於底座上方 0.3×ATR ($${entry}) 掛單，停損守破底${ceilingWarning}`;
+        priority = 4;
+      } else if (curPrice >= ma20 && ma10 >= ma20) {
+        type = '📈 多頭均線/0.382回踩';
+        const sup = Math.max(ma20, fib382);
+        if (sup < curPrice) entry = parseFloat(sup.toFixed(2));
+        else entry = parseFloat(Math.max(ma20, fib500).toFixed(2));
+        if (entry >= curPrice) entry = parseFloat((curPrice - 0.3 * atr14).toFixed(2));
+        stop = parseFloat(Math.min(fib618, entry - 1.0 * atr14).toFixed(2));
+        rationale = `多頭發散，預約於 20MA ($${ma20.toFixed(2)}) 或 0.382 費氏位 ($${fib382}) 支撐掛單${ceilingWarning}`;
+        priority = 3;
+      } else {
+        type = '⏳ 區間震盪·回踩掛單';
+        if (fib500 < curPrice) entry = fib500;
+        else if (fib618 < curPrice) entry = fib618;
+        else entry = parseFloat((curPrice - 0.5 * atr14).toFixed(2));
+        stop = parseFloat(Math.min(lLow, entry - 1.0 * atr14).toFixed(2));
+        rationale = `股價處於半山腰，拒絕追高；預約於 0.5 費氏位 $${entry} 限價接刀${ceilingWarning}`;
+        priority = 2;
+      }
+
+      const risk = Math.max(0.1, parseFloat((entry - stop).toFixed(2)));
+      const reward = Math.max(0.1, parseFloat((finalT1 - entry).toFixed(2)));
+      const rr = parseFloat((reward / risk).toFixed(1));
+
+      return {
+        entry, stop, type, rationale, priority, rr, avgVol5, atrPct,
+        t1: finalT1, t2: finalT2, isTrappedUnderCeiling
+      };
+    }
+
+    function analyzeStockStructure(klines) {
+      if (klines.length < 30) return;
+
+      const macroLookback = klines.slice(-150);
+      const mLow = Math.min(...macroLookback.map(k => k.low));
+      const mHigh = Math.max(...macroLookback.map(k => k.high));
+
+      const localSlice = klines.slice(-25);
+      const lLow = Math.min(...localSlice.map(k => k.low));
+
+      const boxH = mHigh - mLow;
+      const rawT1 = parseFloat((mHigh + boxH).toFixed(2));
+      const rawT2 = parseFloat((rawT1 + (rawT1 - mLow)).toFixed(2));
+
+      currentStockStructure.macroLow = parseFloat(mLow.toFixed(2));
+      currentStockStructure.macroHigh = parseFloat(mHigh.toFixed(2));
+      currentStockStructure.localLow = parseFloat(lLow.toFixed(2));
+      currentStockStructure.boxH = parseFloat(boxH.toFixed(2));
+
+      const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, rawT1, rawT2);
+      currentStockStructure.t1 = plan.t1;
+      currentStockStructure.t2 = plan.t2;
+      currentStockStructure.strategyType = plan.type;
+      currentStockStructure.suggestedEntry = plan.entry;
+      currentStockStructure.suggestedStop = plan.stop;
+      currentStockStructure.rationale = plan.rationale;
+      currentStockStructure.rrRatio = plan.rr;
+    }
+
+    // 併發隊列分批掃描百檔母體（含歷史天花板與牛皮股硬性剔除濾網）
+    async function runFullAutoScanner() {
+      if (isScanning) return;
+      isScanning = true;
+      const btn = document.getElementById('btn-run-scan');
+      if (btn) btn.innerText = '⚡ 掃描中 (0%)...';
+
+      const allCodesMap = { ...UNIVERSE_100 };
+      Object.keys(stockProfiles).forEach(c => {
+        allCodesMap[c] = stockProfiles[c].name;
+      });
+      const allCodes = Object.keys(allCodesMap);
+
+      // 掃描器拉長至 600 天 (~2.5年)，掌握宏觀大頂
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 600);
+      const startStr = startDate.toISOString().split('T')[0];
+
+      const CHUNK_SIZE = 6;
+      const DELAY_MS = 180;
+      const opportunities = [];
+
+      for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
+        const chunk = allCodes.slice(i, i + CHUNK_SIZE);
+        if (btn) btn.innerText = `⚡ 掃描中 (${i}/${allCodes.length})...`;
+
+        const chunkPromises = chunk.map(code => {
+          const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${code}&start_date=${startStr}`;
+          return fetch(url)
+            .then(r => r.json())
+            .then(res => ({ code, data: res.data || [] }))
+            .catch(() => ({ code, data: [] }));
+        });
+
+        const chunkResults = await Promise.allSettled(chunkPromises);
+
+        chunkResults.forEach(res => {
+          const code = res.value ? res.value.code : null;
+          if (!code) return;
+          const rawData = res.value.data || [];
+
+          const klines = rawData
+            .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
+            .map(d => ({
+              time: d.date,
+              open: d.open || d.close,
+              high: d.max,
+              low: d.min,
+              close: d.close,
+              volume: d.Trading_Volume || d.volume || 0
+            }));
+
+          if (klines.length > 30) {
+            const curClose = klines[klines.length - 1].close;
+            const lookback = klines.slice(-120);
+            const mLow = Math.min(...lookback.map(k => k.low));
+            const mHigh = Math.max(...lookback.map(k => k.high));
+            const lLow = Math.min(...klines.slice(-20).map(k => k.low));
+
+            const boxH = mHigh - mLow;
+            const rawT1 = parseFloat((mHigh + boxH).toFixed(2));
+            const rawT2 = parseFloat((rawT1 + (rawT1 - mLow)).toFixed(2));
+
+            const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, rawT1, rawT2);
+            const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
+
+            // =========================================================================
+            // 【硬性剔除濾網】：徹底排除華航等「目標不可達」或「牛皮低量」的劣質標的
+            // =========================================================================
+            if (!isHolding) {
+              // 1. 排除被多年歷史天花板壓制、目標虛胖且真實空間不足者 (徹底排除 2610 華航)
+              if (plan.isTrappedUnderCeiling && plan.rr < 3.0) return;
+              // 2. 排除極度牛皮股 (日均 ATR 波幅比率 < 1.6%)
+              if (plan.atrPct < 1.6) return;
+              // 3. 排除流動性不足標的 (近 5 日均量 < 1,500 張)
+              if (plan.avgVol5 < 1500) return;
+              // 4. 排除真實盈虧比不足者 (R:R < 2.5)
+              if (plan.rr < 2.5) return;
+            }
+
+            opportunities.push({
+              code,
+              name: allCodesMap[code] || code,
+              currentPrice: curClose,
+              entry: plan.entry,
+              stop: plan.stop,
+              t1: plan.t1,
+              t2: plan.t2,
+              rr: plan.rr,
+              tag: plan.type,
+              priority: plan.priority,
+              score: plan.priority * 10 + plan.rr,
+              avgVol5: Math.round(plan.avgVol5),
+              isHolding
+            });
+          }
+        });
+
+        await new Promise(r => setTimeout(r, DELAY_MS));
+      }
+
+      opportunities.sort((a, b) => {
+        if (a.isHolding && !b.isHolding) return -1;
+        if (!a.isHolding && b.isHolding) return 1;
+        return b.score - a.score;
+      });
+
+      scannedOpportunities = opportunities;
+      isScanning = false;
+      if (btn) btn.innerText = '🔄 重新掃描';
+
+      if (currentDashboardMode === 'HUNTER') {
+        renderHunterMode();
+      }
+    }
+
+    function clearPriceLines() {
+      activePriceLines.forEach(l => candleSeries.removePriceLine(l));
+      activePriceLines = [];
+      avgCostLine = null;
+    }
+
+    function addLine(price, color, title, lineStyle = 2, lineWidth = 2) {
+      if (!price || isNaN(price) || price <= 0) return null;
+      const l = candleSeries.createPriceLine({
+        price: parseFloat(price), color, lineWidth, lineStyle, title
+      });
+      activePriceLines.push(l);
+      return l;
+    }
+
+    function renderModeUI() {
+      clearPriceLines();
+      if (currentDashboardMode === 'HUNTER') {
+        renderHunterMode();
+      } else {
+        renderPortfolioMode();
+      }
+    }
+
+    function renderHunterMode() {
+      clearPriceLines();
+      const container = document.getElementById('panel-content-container');
+      const legend = document.getElementById('dynamic-legend');
+      const hud = document.getElementById('hud-bottom-card');
+
+      const entry = currentStockStructure.suggestedEntry;
+      const stop = currentStockStructure.suggestedStop;
+      const t1 = currentStockStructure.t1;
+      const t2 = currentStockStructure.t2;
+
+      addLine(entry, '#c084fc', '👉【動態建議買點】', 0, 2);
+      addLine(stop, '#ef4444', '🛑【ATR結構停損】', 0, 2);
+      addLine(t1, '#10b981', '🎯【T1首波目標】', 2, 2);
+      addLine(t2, '#f59e0b', '🏆【T2二次翻倍】', 2, 2);
+
+      legend.innerHTML = `
+        <span class="text-purple-400 font-bold">● 動態買點</span>
+        <span class="text-red-400 font-bold">● 結構停損</span>
+        <span class="text-emerald-400 font-bold">● T1目標</span>
+        <span class="text-amber-400 font-bold">● T2二次翻倍</span>
+      `;
+
+      let scannerListHtml = scannedOpportunities.slice(0, 15).map((opp, idx) => `
+        <div onclick="switchStock('${opp.code}')" class="p-3 rounded-xl cursor-pointer transition flex items-center justify-between border ${opp.code === currentCode ? 'bg-blue-950/40 border-blue-600 shadow-md' : 'bg-gray-800/40 border-gray-800 hover:bg-gray-800/80'}">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-black px-1.5 py-0.5 rounded ${opp.isHolding ? 'bg-blue-600 text-white' : (idx === 0 ? 'bg-amber-500 text-black' : 'bg-gray-700 text-gray-300')}">
+                ${opp.isHolding ? '持倉' : '#' + (idx + 1)}
+              </span>
+              <span class="font-black text-white text-sm sm:text-base">${opp.code} ${opp.name}</span>
+              <span class="text-xs text-purple-300 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/50">${opp.tag.split(' ')[0]}</span>
+            </div>
+            <div class="text-xs text-gray-400 mt-1">
+              現價: $${opp.currentPrice.toFixed(2)} | 動態買點: <b class="text-purple-300">$${opp.entry}</b>
+              <span class="text-gray-500 ml-1">(${opp.avgVol5}張/日)</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-xs bg-emerald-950 text-emerald-300 px-2 py-1 rounded-lg font-mono font-bold block border border-emerald-800">
+              R:R 1 : ${opp.rr}
+            </span>
+            <span class="text-xs text-emerald-400 block mt-1 font-semibold">T1 $${opp.t1}</span>
+          </div>
+        </div>
+      `).join('');
+
+      container.innerHTML = `
+        <div class="bg-purple-950/20 border-2 border-purple-500/70 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
+          <div class="flex justify-between items-center">
+            <span class="font-black text-white text-sm sm:text-base flex items-center gap-1.5">
+              <span>🎯</span> <span>${currentCode} ${UNIVERSE_100[currentCode] || currentCode} 動態定價指引</span>
+            </span>
+            <span class="text-xs bg-purple-900 text-purple-200 px-2 py-0.5 rounded-md font-bold">
+              ${currentStockStructure.strategyType.split(' ')[0]}
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 pt-1 border-t border-purple-900/60">
+            <div class="bg-gray-900/90 p-2.5 rounded-xl border border-purple-800/50">
+              <span class="text-purple-300 text-xs block font-bold">👉 動態建議買點 (圖上紫線)</span>
+              <span class="text-white font-black text-base sm:text-lg font-mono mt-0.5 block">$${entry}</span>
+              <span class="text-[11px] text-gray-400 block mt-0.5">${currentStockStructure.strategyType}</span>
+            </div>
+            <div class="bg-gray-900/90 p-2.5 rounded-xl border border-red-800/50">
+              <span class="text-red-300 text-xs block font-bold">🛑 結構停損點 (圖上紅線)</span>
+              <span class="text-red-400 font-black text-base sm:text-lg font-mono mt-0.5 block">$${stop}</span>
+              <span class="text-[11px] text-gray-400 block mt-0.5">實體收破此線立即停損</span>
+            </div>
+          </div>
+
+          <div class="bg-gray-900/80 p-2 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
+            <span class="text-purple-400 font-bold block mb-0.5">💡 動態演算依據：</span>
+            ${currentStockStructure.rationale}
+          </div>
+
+          <div class="pt-1">
+            <button onclick="addBatchFromHunter()" class="w-full py-2.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-500 active:scale-98 text-white rounded-xl font-bold transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5">
+              <span>💼</span> <span>將此動態買點加入持倉簿記</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="space-y-2 text-xs sm:text-sm">
+          <div class="flex justify-between items-center border-b border-gray-800 pb-1.5">
+            <span class="font-bold text-gray-300 text-xs sm:text-sm flex items-center gap-1">
+              ⚡ 百檔精選雷達 (已剔除牛皮、低量與天花板受阻股)
+            </span>
+            <button id="btn-run-scan" onclick="runFullAutoScanner()" class="text-xs text-blue-400 hover:text-blue-300 font-bold py-0.5 px-2 rounded-lg bg-blue-950/40 border border-blue-900">
+              🔄 重新掃描
+            </button>
+          </div>
+          <div class="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
+            ${scannerListHtml || '<div class="text-gray-500 text-center py-6">正在嚴格過濾百檔母體與計算盈虧比...</div>'}
+          </div>
+        </div>
+      `;
+
+      hud.innerHTML = `
+        <div class="text-gray-400 font-bold text-xs border-b border-gray-700/60 pb-1 flex justify-between">
+          <span>進場結構指標 (${currentCode})</span>
+          <span class="text-emerald-400 font-bold font-mono">真實盈虧比 1 : ${currentStockStructure.rrRatio}</span>
+        </div>
+        <div class="flex justify-between text-gray-300 text-xs sm:text-sm">
+          <span>首波 T1 目標滿足價：</span>
+          <span class="text-emerald-400 font-mono font-bold">$${t1} (+${(((t1 - entry) / entry) * 100).toFixed(1)}%)</span>
+        </div>
+        <div class="flex justify-between text-gray-300 text-xs sm:text-sm">
+          <span>二次翻亞當 T2 目標：</span>
+          <span class="text-amber-400 font-mono font-bold">$${t2} (+${(((t2 - entry) / entry) * 100).toFixed(1)}%)</span>
+        </div>
+      `;
+    }
+
+    function renderPortfolioMode() {
+      clearPriceLines();
+      const container = document.getElementById('panel-content-container');
+      const legend = document.getElementById('dynamic-legend');
+      const profile = stockProfiles[currentCode] || { name: UNIVERSE_100[currentCode] || currentCode, batches: [] };
+
+      const stop = currentStockStructure.localLow;
+      const t1 = currentStockStructure.t1;
+      const t2 = currentStockStructure.t2;
+      const b2Trigger = currentStockStructure.macroHigh;
+
+      addLine(stop, '#ef4444', '【底座防守】', 0, 2);
+      addLine(b2Trigger, '#c084fc', '👉【B2加碼點】', 0, 2);
+      addLine(t1, '#10b981', '【T1首波目標】', 2, 2);
+      addLine(t2, '#f59e0b', '【T2二次亞當】', 2, 2);
+
+      legend.innerHTML = `
+        <span class="text-blue-400 font-bold">● 加權均價</span>
+        <span class="text-red-400 font-bold">● 底座防守</span>
+        <span class="text-purple-400 font-bold">● B2加碼點</span>
+        <span class="text-emerald-400 font-bold">● T1目標</span>
+        <span class="text-amber-400 font-bold">● T2目標</span>
+      `;
+
+      const holdingCodes = Object.keys(stockProfiles).filter(c => (stockProfiles[c].batches || []).length > 0);
+      const positionTabsHtml = holdingCodes.map(c => {
+        const totalS = stockProfiles[c].batches.reduce((sum, b) => sum + (parseInt(b.shares) || 0), 0);
+        return `
+          <button onclick="switchStock('${c}')" class="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition shrink-0 flex items-center gap-1.5 border ${c === currentCode ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-gray-800/80 border-gray-700 text-gray-300 hover:text-white'}">
+            <span>${c} ${stockProfiles[c].name}</span>
+            <span class="text-xs opacity-90 font-mono">(${(totalS / 1000).toFixed(1)}張)</span>
+          </button>
+        `;
+      }).join('');
+
+      const batches = profile.batches || [];
+      const batchListHtml = batches.map((batch, idx) => `
+        <div id="batch-row-${batch.id}" class="bg-gray-800/50 p-2.5 rounded-xl border border-gray-700/60 flex items-center gap-2 text-xs sm:text-sm">
+          <span class="text-xs font-mono font-bold text-gray-400 shrink-0 w-6">#${idx + 1}</span>
+          
+          <div class="flex-1">
+            <label class="text-xs text-gray-400 block mb-0.5 font-semibold">成本價</label>
+            <input type="number" step="any" inputmode="decimal" value="${batch.cost}" 
+                   oninput="updateBatchRow('${batch.id}', 'cost', this.value)" 
+                   class="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-white font-mono font-bold text-sm outline-none focus:border-blue-500" />
+          </div>
+
+          <div class="flex-1">
+            <label class="text-xs text-gray-400 block mb-0.5 font-semibold">持有股數</label>
+            <input type="number" step="100" value="${batch.shares}" 
+                   oninput="updateBatchRow('${batch.id}', 'shares', this.value)" 
+                   class="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-white font-mono font-bold text-sm outline-none focus:border-blue-500" />
+          </div>
+
+          <div class="w-20 text-right shrink-0">
+            <label class="text-xs text-gray-400 block mb-0.5 font-semibold">損益</label>
+            <span id="batch-pnl-${batch.id}" class="font-mono text-xs sm:text-sm font-bold block">--</span>
+          </div>
+
+          <button onclick="removeBatch('${batch.id}')" title="刪除此筆批次" class="text-gray-400 hover:text-red-400 p-2 rounded-lg transition shrink-0 font-bold text-sm">
+            ✕
+          </button>
+        </div>
+      `).join('');
+
+      container.innerHTML = `
+        <div class="bg-gray-950/80 p-2.5 rounded-2xl border border-gray-800 space-y-2">
+          <div class="flex justify-between items-center text-xs sm:text-sm">
+            <span class="text-gray-400 font-bold flex items-center gap-1.5">
+              💼 我的庫存股票 (${holdingCodes.length} 檔)
+            </span>
+            <span class="text-xs text-gray-500">點擊即時切換</span>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+            ${positionTabsHtml || '<span class="text-gray-500 text-xs">尚無持倉</span>'}
+          </div>
+        </div>
+
+        <div class="bg-blue-950/20 border border-blue-800/60 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
+          <div class="flex justify-between items-center">
+            <span class="font-black text-white text-base sm:text-lg">${currentCode} ${profile.name} 總持倉結算</span>
+            <span id="port-status-pill" class="text-xs font-bold px-2 py-0.5 rounded-md">
+              --
+            </span>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5 mt-1">
+            <div class="bg-gray-800/60 p-2.5 rounded-xl border border-gray-700/60">
+              <span class="text-gray-400 block text-xs mb-0.5 font-semibold">加權平均成本</span>
+              <span id="stat-avg-cost" class="font-mono font-black text-white text-base sm:text-lg">$0.00</span>
+            </div>
+            <div class="bg-gray-800/60 p-2.5 rounded-xl border border-gray-700/60">
+              <span class="text-gray-400 block text-xs mb-0.5 font-semibold">總持股數 (合計)</span>
+              <span id="stat-total-shares" class="font-mono font-black text-white text-base sm:text-lg">0 股</span>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center pt-2 border-t border-blue-900/60 text-xs sm:text-sm">
+            <span class="text-gray-300 font-semibold">目前總帳面損益：</span>
+            <span id="port-pnl-label" class="font-mono font-bold text-sm sm:text-base">
+              -- 元 (--%)
+            </span>
+          </div>
+        </div>
+
+        <div class="bg-gray-900/90 border border-gray-800 p-3 rounded-2xl space-y-2.5 text-xs sm:text-sm">
+          <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <span class="font-bold text-gray-200 text-xs sm:text-sm flex items-center gap-1.5">
+              📋 獨立買進批次明細 (<span id="batch-count-label" class="text-blue-400">${batches.length}</span> 筆)
+            </span>
+            <button onclick="addNewBatch()" class="bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl transition shadow flex items-center gap-1">
+              <span>＋</span> <span>新增批次</span>
+            </button>
+          </div>
+
+          <div id="batch-list-container" class="space-y-2 max-h-[190px] overflow-y-auto pr-0.5">
+            ${batchListHtml || '<div class="text-gray-500 text-center py-4 text-xs">尚無買進批次，點擊「＋ 新增批次」開始記帳</div>'}
+          </div>
+        </div>
+
+        <div class="space-y-2 text-xs sm:text-sm">
+          <div class="bg-emerald-950/20 border border-emerald-800/40 p-2.5 rounded-xl flex justify-between items-center">
+            <div>
+              <div id="port-t1-title" class="text-emerald-400 font-bold text-xs">🎯 T1 建議收割 60%</div>
+              <div class="text-emerald-300 font-black text-sm sm:text-base font-mono">$${t1}</div>
+            </div>
+            <div class="text-right">
+              <div id="port-t1-money" class="text-emerald-400 font-bold font-mono text-sm sm:text-base">+-- 元</div>
+              <div id="port-t1-pct" class="text-emerald-400/90 font-semibold text-xs font-mono">(+--%)</div>
+            </div>
+          </div>
+
+          <div class="bg-amber-950/20 border border-amber-800/40 p-2.5 rounded-xl flex justify-between items-center">
+            <div>
+              <div id="port-t2-title" class="text-amber-400 font-bold text-xs">🏆 T2 奔跑 40%</div>
+              <div class="text-amber-300 font-black text-sm sm:text-base font-mono">$${t2}</div>
+            </div>
+            <div class="text-right">
+              <div id="port-t2-money" class="text-amber-400 font-bold font-mono text-sm sm:text-base">+-- 元</div>
+              <div id="port-t2-pct" class="text-amber-400/90 font-semibold text-xs font-mono">(+--%)</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      recalcPortfolioAggregates();
+    }
+
+    function addNewBatch() {
+      const profile = stockProfiles[currentCode];
+      if (!profile.batches) profile.batches = [];
+
+      const defaultPrice = currentStockStructure.suggestedEntry > 0 
+        ? currentStockStructure.suggestedEntry 
+        : currentStockStructure.currentPrice;
+
+      const newId = 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      profile.batches.push({
+        id: newId,
+        cost: defaultPrice,
+        shares: 10000,
+        tag: '加碼批次'
+      });
+
+      saveProfiles();
+      renderPortfolioMode();
+    }
+
+    function addBatchFromHunter() {
+      const profile = stockProfiles[currentCode];
+      if (!profile.batches) profile.batches = [];
+
+      const entryPrice = currentStockStructure.suggestedEntry > 0 
+        ? currentStockStructure.suggestedEntry 
+        : currentStockStructure.currentPrice;
+
+      const newId = 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+      profile.batches.push({
+        id: newId,
+        cost: entryPrice,
+        shares: 5000,
+        tag: currentStockStructure.strategyType ? currentStockStructure.strategyType.split(' ')[0] : '動態切入'
+      });
+
+      saveProfiles();
+      setDashboardMode('PORTFOLIO');
+    }
+
+    function removeBatch(batchId) {
+      const profile = stockProfiles[currentCode];
+      if (!profile || !profile.batches) return;
+
+      profile.batches = profile.batches.filter(b => b.id !== batchId);
+      saveProfiles();
+      renderPortfolioMode();
+    }
+
+    function updateBatchRow(batchId, field, val) {
+      const profile = stockProfiles[currentCode];
+      if (!profile || !profile.batches) return;
+
+      const target = profile.batches.find(b => b.id === batchId);
+      if (!target) return;
+
+      const numVal = parseFloat(val);
+      if (!isNaN(numVal)) {
+        target[field] = numVal;
+        saveProfiles();
+        recalcPortfolioAggregates();
+      }
+    }
+
+    function recalcPortfolioAggregates() {
+      const profile = stockProfiles[currentCode];
+      const batches = profile.batches || [];
+      const curPrice = currentStockStructure.currentPrice;
+      const t1 = currentStockStructure.t1;
+      const t2 = currentStockStructure.t2;
+      const stop = currentStockStructure.localLow;
+
+      let totalShares = 0;
+      let totalCostSum = 0;
+
+      batches.forEach(b => {
+        const c = parseFloat(b.cost) || 0;
+        const s = parseInt(b.shares) || 0;
+        totalShares += s;
+        totalCostSum += (c * s);
+
+        const rowPnl = (curPrice - c) * s;
+        const pnlLabel = document.getElementById(`batch-pnl-${b.id}`);
+        if (pnlLabel) {
+          pnlLabel.innerText = `${rowPnl >= 0 ? '+' : ''}${Math.round(rowPnl).toLocaleString()}`;
+          pnlLabel.className = `font-mono text-xs sm:text-sm font-bold block ${rowPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+        }
+      });
+
+      const avgCost = totalShares > 0 ? (totalCostSum / totalShares) : 0;
+      const totalPnl = Math.round((curPrice - avgCost) * totalShares);
+      const totalPnlPct = avgCost > 0 ? (((curPrice - avgCost) / avgCost) * 100).toFixed(1) : 0;
+
+      const statCost = document.getElementById('stat-avg-cost');
+      const statShares = document.getElementById('stat-total-shares');
+      const pnlLabel = document.getElementById('port-pnl-label');
+      const statusPill = document.getElementById('port-status-pill');
+
+      if (statCost) statCost.innerText = `$${avgCost.toFixed(2)}`;
+      if (statShares) statShares.innerText = `${totalShares.toLocaleString()} 股`;
+
+      if (pnlLabel) {
+        pnlLabel.innerText = `${totalPnl >= 0 ? '+' : ''}${totalPnl.toLocaleString()} 元 (${totalPnlPct}%)`;
+        pnlLabel.className = `font-mono font-bold text-sm sm:text-base ${totalPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+      }
+      if (statusPill) {
+        statusPill.innerText = totalPnl >= 0 ? '整體獲利中' : '回檔整理中';
+        statusPill.className = `text-xs font-bold px-2.5 py-1 rounded-lg ${totalPnl >= 0 ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-red-950 text-red-300 border border-red-800'}`;
+      }
+
+      if (avgCost > 0) {
+        if (!avgCostLine) {
+          avgCostLine = addLine(avgCost, '#3b82f6', '【加權均價】', 1, 2);
+        } else {
+          avgCostLine.applyOptions({ price: avgCost });
+        }
+      } else if (avgCostLine) {
+        candleSeries.removePriceLine(avgCostLine);
+        avgCostLine = null;
+      }
+
+      const t1Shares = Math.round(totalShares * 0.6);
+      const t2Shares = totalShares - t1Shares;
+      const t1Profit = Math.round((t1 - avgCost) * t1Shares);
+      const t2Profit = Math.round((t2 - avgCost) * t2Shares);
+      const t1Pct = avgCost > 0 ? (((t1 - avgCost) / avgCost) * 100).toFixed(1) : 0;
+      const t2Pct = avgCost > 0 ? (((t2 - avgCost) / avgCost) * 100).toFixed(1) : 0;
+
+      const t1Title = document.getElementById('port-t1-title');
+      const t1Money = document.getElementById('port-t1-money');
+      const t1PctElem = document.getElementById('port-t1-pct');
+
+      const t2Title = document.getElementById('port-t2-title');
+      const t2Money = document.getElementById('port-t2-money');
+      const t2PctElem = document.getElementById('port-t2-pct');
+
+      if (t1Title) t1Title.innerText = `🎯 T1 建議收割 60% (${t1Shares.toLocaleString()} 股)`;
+      if (t1Money) t1Money.innerText = `+${t1Profit.toLocaleString()} 元`;
+      if (t1PctElem) t1PctElem.innerText = `(+${t1Pct}%)`;
+
+      if (t2Title) t2Title.innerText = `🏆 T2 奔跑 40% (${t2Shares.toLocaleString()} 股)`;
+      if (t2Money) t2Money.innerText = `+${t2Profit.toLocaleString()} 元`;
+      if (t2PctElem) t2PctElem.innerText = `(+${t2Pct}%)`;
+
+      const risk = Math.max(0, (avgCost - stop) * totalShares);
+      const totalReward = t1Profit + t2Profit;
+      const hud = document.getElementById('hud-bottom-card');
+      if (hud) {
+        hud.innerHTML = `
+          <div class="text-gray-400 font-bold text-xs border-b border-gray-700/60 pb-1 flex justify-between">
+            <span>持倉極限風控 (${batches.length} 筆批次)</span>
+            <span class="text-red-400 font-bold font-mono">底座防守: $${stop}</span>
+          </div>
+          <div class="flex justify-between text-gray-300 text-xs sm:text-sm">
+            <span>若破底最大承擔風險：</span>
+            <span class="text-red-400 font-mono font-bold">-$${Math.round(risk).toLocaleString()}</span>
+          </div>
+          <div class="flex justify-between text-emerald-400 font-bold pt-1.5 border-t border-gray-700/60 text-xs sm:text-sm">
+            <span>全波段最優期望總盈餘：</span>
+            <span class="font-mono text-sm sm:text-base">+$${totalReward.toLocaleString()}</span>
+          </div>
+        `;
+      }
+    }
+
+    function saveProfiles() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stockProfiles));
+    }
+
+    function renderStockSelect() {
+      const select = document.getElementById('stock-select');
+      select.innerHTML = '';
+
+      const myHoldingCodes = Object.keys(stockProfiles);
+      myHoldingCodes.forEach(code => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.innerText = `💼 ${code} ${stockProfiles[code].name}`;
+        if (code === currentCode) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      Object.keys(UNIVERSE_100).forEach(code => {
+        if (!stockProfiles[code]) {
+          const opt = document.createElement('option');
+          opt.value = code;
+          opt.innerText = `${code} ${UNIVERSE_100[code]}`;
+          if (code === currentCode) opt.selected = true;
+          select.appendChild(opt);
+        }
+      });
+    }
+
+    function switchStock(code) {
+      loadStock(code);
+    }
+
+    function setTimeframe(tf) {
+      currentTimeframe = tf;
+      ['D', 'W', 'M'].forEach(t => {
+        document.getElementById(`tf-${t}`).className = (t === tf)
+          ? 'px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition'
+          : 'px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition';
+      });
+      renderActiveTimeframe();
+    }
+
+    function renderActiveTimeframe() {
+      if (rawDailyKlines.length === 0) return;
+      candleSeries.setData(aggregateKlines(rawDailyKlines, currentTimeframe));
+      const map = { D: '日 K', W: '週 K', M: '月 K' };
+      document.getElementById('chart-info').innerText = `${currentCode} ${UNIVERSE_100[currentCode] || currentCode} 【${map[currentTimeframe]}】`;
+    }
+
+    function aggregateKlines(dailyData, type) {
+      if (type === 'D') return dailyData;
+      const groups = {};
+      dailyData.forEach(bar => {
+        let key = '';
+        const d = new Date(bar.time);
+        if (type === 'W') {
+          const day = d.getDay() || 7;
+          d.setDate(d.getDate() - day + 1);
+          key = d.toISOString().split('T')[0];
+        } else if (type === 'M') {
+          key = `${bar.time.slice(0, 7)}-01`;
+        }
+        if (!groups[key]) {
+          groups[key] = { time: key, open: bar.open, high: bar.high, low: bar.low, close: bar.close };
+        } else {
+          groups[key].high = Math.max(groups[key].high, bar.high);
+          groups[key].low = Math.min(groups[key].low, bar.low);
+          groups[key].close = bar.close;
+        }
+      });
+      return Object.values(groups).sort((a, b) => a.time.localeCompare(b.time));
+    }
+
+    function openModal() { document.getElementById('modal-custom').classList.remove('hidden'); }
+    function closeModal() { document.getElementById('modal-custom').classList.add('hidden'); }
+
+    function confirmCustomStock() {
+      const code = document.getElementById('custom-code').value.trim();
+      const name = document.getElementById('custom-name').value.trim();
+      if (!code || !name) return alert('請填妥代號與名稱');
+
+      UNIVERSE_100[code] = name;
+      stockProfiles[code] = { name, batches: [] };
+      saveProfiles();
+      renderStockSelect();
+      closeModal();
+      switchStock(code);
+      runFullAutoScanner();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initChart();
+      renderStockSelect();
+      switchStock('9945');
+    });
+  </script>
+</body>
+</html>
