@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>50檔高動能波段決策終端</title>
+  <title>50檔高動能波段決策終端 (中繼測幅優化版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -39,7 +39,6 @@
         ⚡ 波段決策終端
       </span>
       
-      <!-- 核心模式雙切換 -->
       <div class="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs sm:text-sm font-bold gap-1">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3 py-1.5 rounded-lg bg-blue-600 text-white transition flex items-center gap-1 font-bold">
           <span>🎯</span> <span>50檔雷達</span>
@@ -139,7 +138,6 @@
   </div>
 
   <script>
-    // 精選 50 檔高動能、高流動性主流母體庫
     const UNIVERSE_50 = {
       // AI 伺服器與核心硬體 (8檔)
       '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎',
@@ -148,7 +146,7 @@
       '2330': '台積電', '2454': '聯發科', '3443': '創意', '3661': '世芯-KY',
       '3035': '智原', '3034': '聯詠', '3583': '辛耘', '3131': '弘塑',
       '6187': '萬潤', '3711': '日月光投控', '3450': '聯鈞', '6442': '光聖',
-      // 重電綠能與機器人自動化 (8檔)
+      // 重電綠能與自動化 (8檔)
       '1519': '華城', '1513': '中興電', '1514': '亞力', '1609': '大亞',
       '2359': '所羅門', '2049': '上銀', '4583': '台灣精銳', '8374': '羅昇',
       // 散熱、高速傳輸與載板 (10檔)
@@ -170,12 +168,11 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v1';
+    const STORAGE_KEY = 'macro_trader_universe50_v2';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
 
-    // 內存記憶體快取 (同一會話中絕不重複請求，0 延遲且極度省配額)
     const memoryKlinesCache = {};
 
     let rawDailyKlines = [];
@@ -355,7 +352,6 @@
       renderModeUI();
     }
 
-    // 核心資料加載函式 (快取第一、獨立防護、穩定 730 天)
     async function loadStock(code) {
       currentCode = code;
       const name = UNIVERSE_50[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
@@ -374,7 +370,7 @@
         return;
       }
 
-      // 2. 730天安全查詢 (約 2 年數據，體積適中，絕不造成超載)
+      // 2. 730天安全查詢 (約 2 年數據)
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 730);
       const startStr = startDate.toISOString().split('T')[0];
@@ -430,7 +426,39 @@
       }, 100);
     }
 
-    // 多因子動態定價演算核心 (含歷史天花板壓制校正)
+    // 核心中繼測幅演算：杜絕台積電等單邊狂飆股目標價失真
+    function calculateSymmetricTargets(klines, mLow, mHigh, curPrice) {
+      const trendSpan = (mHigh - mLow) / curPrice;
+      let effectiveBoxH = mHigh - mLow;
+      let baseHigh = mHigh;
+      let baseLow = mLow;
+
+      // 若 150 天高低落差 > 25%，判定為單邊主升段斜坡，切換為近 35~40 天高檔中繼平台
+      if (trendSpan > 0.25) {
+        const localBoxSlice = klines.slice(-40);
+        const lbHigh = Math.max(...localBoxSlice.map(k => k.high));
+        const lbLow = Math.min(...localBoxSlice.map(k => k.low));
+        effectiveBoxH = Math.max(lbHigh - lbLow, curPrice * 0.08);
+        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.18); // 單波上限 18%
+        baseHigh = lbHigh;
+        baseLow = lbLow;
+      } else {
+        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.25); // 常態上限 25%
+      }
+
+      const rawT1 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
+      const rawT2 = parseFloat((rawT1 + effectiveBoxH).toFixed(2));
+
+      return {
+        baseHigh,
+        baseLow,
+        boxH: effectiveBoxH,
+        rawT1,
+        rawT2
+      };
+    }
+
+    // 多因子動態定價演算核心
     function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2) {
       const len = klines.length;
       const curPrice = klines[len - 1].close;
@@ -460,7 +488,7 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
-      // 天花板阻力檢驗
+      // 天花板阻力檢驗 (防止撞牆)
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -484,7 +512,7 @@
         type = '🚀 頸線動能突破/回踩';
         entry = parseFloat(mHigh.toFixed(2));
         stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-        rationale = `站穩宏觀頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
+        rationale = `站穩平台頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
         priority = 5;
       } else if (curPrice <= lLow * 1.035) {
         type = '🛡️ 底座止跌低吸點';
@@ -527,20 +555,20 @@
       const macroLookback = klines.slice(-150);
       const mLow = Math.min(...macroLookback.map(k => k.low));
       const mHigh = Math.max(...macroLookback.map(k => k.high));
+      const curPrice = klines[klines.length - 1].close;
 
       const localSlice = klines.slice(-25);
       const lLow = Math.min(...localSlice.map(k => k.low));
 
-      const boxH = mHigh - mLow;
-      const rawT1 = parseFloat((mHigh + boxH).toFixed(2));
-      const rawT2 = parseFloat((rawT1 + (rawT1 - mLow)).toFixed(2));
+      // 呼叫中繼型態動態識別函式
+      const targets = calculateSymmetricTargets(klines, mLow, mHigh, curPrice);
 
-      currentStockStructure.macroLow = parseFloat(mLow.toFixed(2));
-      currentStockStructure.macroHigh = parseFloat(mHigh.toFixed(2));
+      currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
+      currentStockStructure.macroHigh = parseFloat(targets.baseHigh.toFixed(2));
       currentStockStructure.localLow = parseFloat(lLow.toFixed(2));
-      currentStockStructure.boxH = parseFloat(boxH.toFixed(2));
+      currentStockStructure.boxH = parseFloat(targets.boxH.toFixed(2));
 
-      const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, rawT1, rawT2);
+      const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
       currentStockStructure.t1 = plan.t1;
       currentStockStructure.t2 = plan.t2;
       currentStockStructure.strategyType = plan.type;
@@ -550,14 +578,13 @@
       currentStockStructure.rrRatio = plan.rr;
     }
 
-    // 50 檔高動能母體極速隊列掃描器 (分批每組 5 檔，間隔 200ms，徹底避開 429)
+    // 50 檔高動能母體極速隊列掃描器
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
       const btn = document.getElementById('btn-run-scan');
       if (btn) btn.innerText = '⚡ 掃描中 (0%)...';
 
-      // 彙整 50 檔母體 + 用戶自選/持倉
       const allCodesMap = { ...UNIVERSE_50 };
       Object.keys(stockProfiles).forEach(c => {
         allCodesMap[c] = stockProfiles[c].name;
@@ -574,7 +601,6 @@
 
       for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
         const chunk = allCodes.slice(i, i + CHUNK_SIZE);
-        const percent = Math.round((i / allCodes.length) * 100);
         if (btn) btn.innerText = `⚡ 掃描中 (${i}/${allCodes.length})...`;
 
         const chunkPromises = chunk.map(async code => {
@@ -624,14 +650,11 @@
             const mHigh = Math.max(...lookback.map(k => k.high));
             const lLow = Math.min(...klines.slice(-20).map(k => k.low));
 
-            const boxH = mHigh - mLow;
-            const rawT1 = parseFloat((mHigh + boxH).toFixed(2));
-            const rawT2 = parseFloat((rawT1 + (rawT1 - mLow)).toFixed(2));
-
-            const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, rawT1, rawT2);
+            // 套用相同的中繼箱體過濾
+            const targets = calculateSymmetricTargets(klines, mLow, mHigh, curClose);
+            const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
             const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
 
-            // 嚴格過濾：天花板壓制、牛皮低量直接排除
             if (!isHolding) {
               if (plan.isTrappedUnderCeiling && plan.rr < 3.0) return;
               if (plan.atrPct < 1.4) return;
@@ -722,7 +745,6 @@
         <span class="text-amber-400 font-bold">● T2二次翻倍</span>
       `;
 
-      // 產生清單 (狀態精確分離，杜絕假死卡頓)
       let scannerListHtml = '';
       if (isScanning) {
         scannerListHtml = '<div class="text-gray-500 text-center py-6 text-xs">正在快速掃描 50 檔高動能母體與計算盈虧比...</div>';
@@ -1224,13 +1246,12 @@
       runFullAutoScanner();
     }
 
-// ✅ 修正後的安全寫法 (只載入當前 1 檔股票，額度消耗為 1)
-window.addEventListener('DOMContentLoaded', () => {
-  initChart();
-  renderStockSelect();
-  switchStock('9945'); // 僅載入 9945，0 負擔，永遠不封鎖
-});
-
+    // 啟動保護：僅載入單一預設標的，徹底告別開頁耗盡 API 額度問題
+    window.addEventListener('DOMContentLoaded', () => {
+      initChart();
+      renderStockSelect();
+      switchStock('9945');
+    });
   </script>
 </body>
 </html>
