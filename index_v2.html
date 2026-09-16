@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>多批次波段決策終端 (手機大字優化版)</title>
+  <title>多批次波段決策終端 (動態定價量化版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -17,11 +17,9 @@
       -webkit-appearance: none;
       margin: 0;
     }
-    /* 防止 iOS Safari 點擊輸入框時自動縮放畫面 */
     @media screen and (max-width: 768px) {
       input, select { font-size: 16px !important; }
     }
-    /* 自訂平滑滾動條 */
     ::-webkit-scrollbar {
       width: 4px;
       height: 4px;
@@ -77,6 +75,9 @@
       <div class="flex flex-wrap justify-between items-center text-xs sm:text-sm pb-2 border-b border-gray-800/80 gap-2 shrink-0">
         <div class="flex items-center gap-2">
           <span id="chart-info" class="font-bold text-white tracking-wide">連線中...</span>
+          <button id="btn-view-scope" onclick="toggleViewScope()" class="bg-blue-900/60 text-blue-200 border border-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">
+            <span>🔭</span> <span>全景(含T1/T2)</span>
+          </button>
           <button id="btn-chart-toggle" onclick="toggleChartDisplay()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded-lg text-xs font-semibold border border-gray-700">
             👁️ <span id="btn-chart-toggle-text">隱藏</span>
           </button>
@@ -154,10 +155,10 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_multi_batches_v2';
+    const STORAGE_KEY = 'macro_trader_multi_batches_v3';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
-    let currentDashboardMode = 'PORTFOLIO';
+    let currentDashboardMode = 'HUNTER';
 
     let rawDailyKlines = [];
     let currentTimeframe = 'D';
@@ -168,6 +169,7 @@
 
     let scannedOpportunities = [];
     let isScanning = false;
+    let isMacroView = true;
 
     let currentStockStructure = {
       currentPrice: 0,
@@ -180,7 +182,8 @@
       strategyType: '',
       suggestedEntry: 0,
       suggestedStop: 0,
-      rrRatio: 0
+      rrRatio: 0,
+      rationale: ''
     };
 
     function initChart() {
@@ -198,7 +201,27 @@
 
       candleSeries = chart.addCandlestickSeries({
         upColor: '#ef4444', downColor: '#22c55e', borderVisible: false,
-        wickUpColor: '#ef4444', wickDownColor: '#22c55e'
+        wickUpColor: '#ef4444', wickDownColor: '#22c55e',
+        autoscaleInfoProvider: (original) => {
+          const res = original();
+          if (res !== null && res.priceRange !== null) {
+            let maxP = res.priceRange.maxValue;
+            let minP = res.priceRange.minValue;
+            if (isMacroView) {
+              if (currentStockStructure.t1 > 0) maxP = Math.max(maxP, currentStockStructure.t1);
+              if (currentStockStructure.t2 > 0) maxP = Math.max(maxP, currentStockStructure.t2);
+              if (currentStockStructure.localLow > 0) minP = Math.min(minP, currentStockStructure.localLow);
+            }
+            return {
+              priceRange: {
+                minValue: minP * 0.98,
+                maxValue: maxP * 1.03
+              },
+              margins: res.margins
+            };
+          }
+          return res;
+        }
       });
 
       window.addEventListener('resize', () => {
@@ -211,6 +234,21 @@
     function changeChartOpacity(val) {
       document.getElementById('chart-box').style.opacity = val / 100;
       document.getElementById('chart-opacity-val').innerText = `${val}%`;
+    }
+
+    function toggleViewScope() {
+      isMacroView = !isMacroView;
+      const btn = document.getElementById('btn-view-scope');
+      if (btn) {
+        btn.innerHTML = isMacroView ? '<span>🔭</span> <span>全景(含T1/T2)</span>' : '<span>🔍</span> <span>近景聚焦</span>';
+        btn.className = isMacroView 
+          ? 'bg-blue-900/60 text-blue-200 border border-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm'
+          : 'bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm';
+      }
+      if (candleSeries && chart) {
+        candleSeries.applyOptions({});
+        chart.priceScale('right').applyOptions({ autoScale: true });
+      }
     }
 
     function toggleChartDisplay() {
@@ -265,7 +303,8 @@
         if (!json.data || json.data.length === 0) throw new Error('無數據');
 
         rawDailyKlines = json.data.map(d => ({
-          time: d.date, open: d.open, high: d.max, low: d.min, close: d.close
+          time: d.date, open: d.open, high: d.max, low: d.min, close: d.close,
+          volume: d.Trading_Volume || d.volume || 0
         }));
 
         currentStockStructure.currentPrice = rawDailyKlines[rawDailyKlines.length - 1].close;
@@ -273,6 +312,11 @@
         analyzeStockStructure(rawDailyKlines);
         renderActiveTimeframe();
         renderModeUI();
+
+        if (candleSeries && chart && isMacroView) {
+          candleSeries.applyOptions({});
+          chart.priceScale('right').applyOptions({ autoScale: true });
+        }
 
         if (scannedOpportunities.length === 0) {
           runFullAutoScanner();
@@ -285,6 +329,87 @@
       } catch (err) {
         document.getElementById('chart-info').innerText = `${code} 載入失敗`;
       }
+    }
+
+    // =========================================================================
+    // 核心演算法：多因子動態定價引擎 (ATR + 均線 + 斐波那契 + 宏觀幾何)
+    // 徹底解決「無腦把收盤價當買點」問題
+    // =========================================================================
+    function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1) {
+      const len = klines.length;
+      const curPrice = klines[len - 1].close;
+
+      // 1. 計算 14 日真實波幅 (ATR14)
+      let trSum = 0;
+      const atrPeriod = Math.min(14, len - 1);
+      for (let i = len - atrPeriod; i < len; i++) {
+        const h = klines[i].high;
+        const l = klines[i].low;
+        const prevC = klines[i - 1].close;
+        const tr = Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+        trSum += tr;
+      }
+      const atr14 = trSum / atrPeriod;
+
+      // 2. 計算 10MA 與 20MA
+      const ma10 = klines.slice(-10).reduce((sum, k) => sum + k.close, 0) / 10;
+      const ma20 = klines.slice(-20).reduce((sum, k) => sum + k.close, 0) / 20;
+
+      // 3. 計算近 20 日微觀波段斐波那契回撤位
+      const recentSlice = klines.slice(-20);
+      const rHigh = Math.max(...recentSlice.map(k => k.high));
+      const rLow = Math.min(...recentSlice.map(k => k.low));
+      const fibDiff = rHigh - rLow;
+      const fib382 = parseFloat((rHigh - 0.382 * fibDiff).toFixed(2));
+      const fib500 = parseFloat((rHigh - 0.500 * fibDiff).toFixed(2));
+      const fib618 = parseFloat((rHigh - 0.618 * fibDiff).toFixed(2));
+
+      let entry = 0;
+      let stop = 0;
+      let type = '';
+      let rationale = '';
+      let priority = 1;
+
+      // --- 情境 A：突破/回踩接力段 (現價位於宏觀頸線附近) ---
+      if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.06) {
+        type = '🚀 頸線突破/回踩接力';
+        entry = mHigh;
+        stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
+        rationale = `站穩宏觀頸線 $${mHigh} 買進，設 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 假突破防洗停損`;
+        priority = 5;
+      }
+      // --- 情境 B：底座共振低吸段 (現價貼近近期底座) ---
+      else if (curPrice <= lLow * 1.035) {
+        type = '🛡️ 底座止跌低吸點';
+        entry = parseFloat((lLow + 0.3 * atr14).toFixed(2)); // 底座小幅止跌確認掛單
+        stop = parseFloat((lLow - 0.5 * atr14).toFixed(2));
+        rationale = `測試底座 $${lLow}，於底座上方 0.3×ATR ($${entry}) 掛單，停損守破底`;
+        priority = 4;
+      }
+      // --- 情境 C：上升趨勢中的均線回踩段 (多頭排列) ---
+      else if (curPrice >= ma20 && ma10 >= ma20) {
+        type = '📈 上升趨勢·MA與0.382共振位';
+        // 取 20MA 與 Fib 0.382 之支撐交會點
+        entry = parseFloat(Math.max(ma20, fib382).toFixed(2));
+        stop = parseFloat(Math.min(fib618, entry - 1.0 * atr14).toFixed(2));
+        rationale = `多頭發散，於 20MA ($${ma20.toFixed(2)}) 與 0.382 費氏位 ($${fib382}) 支撐掛單承接`;
+        priority = 3;
+      }
+      // --- 情境 D：箱體中段整理 (絕不無腦追現價，等 0.500 黃金回撤) ---
+      else {
+        type = '⏳ 區間震盪·0.5 費氏回撤掛單';
+        entry = fib500; // 0.500 黃金回撤位
+        stop = parseFloat((fib618 - 0.5 * atr14).toFixed(2));
+        rationale = `現價在箱體中段，拒絕追高；預約於 0.5 費氏位 $${fib500} 低接，停損守 0.618 下方`;
+        priority = 2;
+      }
+
+      // 風險與期望值
+      const risk = Math.max(0.1, entry - stop);
+      const reward = Math.max(0.1, t1 - entry);
+      const rr = parseFloat((reward / risk).toFixed(1));
+
+      return { entry, stop, type, rationale, priority, rr };
     }
 
     function analyzeStockStructure(klines) {
@@ -309,30 +434,15 @@
       currentStockStructure.t1 = t1;
       currentStockStructure.t2 = t2;
 
-      if (curPrice <= lLow * 1.035) {
-        currentStockStructure.strategyType = '🛡️ 底座埋伏點 (極小停損)';
-        currentStockStructure.suggestedEntry = parseFloat((lLow * 1.01).toFixed(2));
-        currentStockStructure.suggestedStop = parseFloat((lLow * 0.985).toFixed(2));
-      } else if (curPrice >= mHigh * 0.965 && curPrice < mHigh * 1.01) {
-        currentStockStructure.strategyType = '🚀 頸線突破買點 (動能主升)';
-        currentStockStructure.suggestedEntry = mHigh;
-        currentStockStructure.suggestedStop = parseFloat((mHigh * 0.97).toFixed(2));
-      } else if (curPrice >= mHigh && curPrice <= mHigh * 1.06) {
-        currentStockStructure.strategyType = '🔄 回踩支撐接力點 (S/R Flip)';
-        currentStockStructure.suggestedEntry = mHigh;
-        currentStockStructure.suggestedStop = parseFloat((mHigh * 0.975).toFixed(2));
-      } else {
-        currentStockStructure.strategyType = '📈 波段常態切入點';
-        currentStockStructure.suggestedEntry = curPrice;
-        currentStockStructure.suggestedStop = parseFloat((lLow * 0.99).toFixed(2));
-      }
-
-      const risk = Math.max(0.1, currentStockStructure.suggestedEntry - currentStockStructure.suggestedStop);
-      const reward = Math.max(0.1, t1 - currentStockStructure.suggestedEntry);
-      currentStockStructure.rrRatio = (reward / risk).toFixed(1);
+      // 呼叫多因子動態定價引擎
+      const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, t1);
+      currentStockStructure.strategyType = plan.type;
+      currentStockStructure.suggestedEntry = plan.entry;
+      currentStockStructure.suggestedStop = plan.stop;
+      currentStockStructure.rationale = plan.rationale;
+      currentStockStructure.rrRatio = plan.rr;
     }
 
-    // 核心修復：掃描器永遠保留完整池子，絕不讓任何股票消失
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
@@ -368,47 +478,22 @@
           const t1 = parseFloat((mHigh + boxH).toFixed(2));
           const t2 = parseFloat((t1 + (t1 - mLow)).toFixed(2));
 
-          let entry = curClose;
-          let stop = parseFloat((lLow * 0.985).toFixed(2));
-          let tag = '常態追蹤';
-          let priority = 1;
-
-          if (curClose <= lLow * 1.03) {
-            entry = parseFloat((lLow * 1.01).toFixed(2));
-            stop = parseFloat((lLow * 0.985).toFixed(2));
-            tag = '🛡️ 底座埋伏 (極高盈虧比)';
-            priority = 3;
-          } else if (curClose >= mHigh * 0.97 && curClose <= mHigh * 1.01) {
-            entry = mHigh;
-            stop = parseFloat((mHigh * 0.97).toFixed(2));
-            tag = '🚀 頸線待突破 (即將發動)';
-            priority = 4;
-          } else if (curClose > mHigh && curClose <= mHigh * 1.05) {
-            entry = mHigh;
-            stop = parseFloat((mHigh * 0.975).toFixed(2));
-            tag = '⚡ 回踩支撐 (最佳二次買點)';
-            priority = 5;
-          }
-
-          const risk = Math.max(0.1, entry - stop);
-          const reward = Math.max(0.1, t1 - entry);
-          const rr = parseFloat((reward / risk).toFixed(1));
+          const plan = calculateDynamicPricing(klines, mLow, mHigh, lLow, t1);
 
           opportunities.push({
             code,
             name: stockProfiles[code].name,
             currentPrice: curClose,
-            entry,
-            stop,
+            entry: plan.entry,
+            stop: plan.stop,
             t1,
             t2,
-            rr,
-            tag,
-            priority,
-            score: priority * 10 + rr
+            rr: plan.rr,
+            tag: plan.type,
+            priority: plan.priority,
+            score: plan.priority * 10 + plan.rr
           });
         } else {
-          // 網路偶爾卡頓或數據少時，依然保留該檔股票！絕不消失！
           opportunities.push({
             code,
             name: stockProfiles[code].name,
@@ -459,7 +544,7 @@
     }
 
     // ==============================================================
-    // 視圖 1：【自動選股獵人模式】(大字排版、高辨識度)
+    // 視圖 1：【自動選股獵人模式】(顯示動態定價依據)
     // ==============================================================
     function renderHunterMode() {
       clearPriceLines();
@@ -472,13 +557,13 @@
       const t1 = currentStockStructure.t1;
       const t2 = currentStockStructure.t2;
 
-      addLine(entry, '#c084fc', '👉【建議買點】', 0, 2);
-      addLine(stop, '#ef4444', '🛑【結構停損】', 0, 2);
+      addLine(entry, '#c084fc', '👉【動態建議買點】', 0, 2);
+      addLine(stop, '#ef4444', '🛑【ATR結構停損】', 0, 2);
       addLine(t1, '#10b981', '🎯【T1首波目標】', 2, 2);
       addLine(t2, '#f59e0b', '🏆【T2二次翻倍】', 2, 2);
 
       legend.innerHTML = `
-        <span class="text-purple-400 font-bold">● 建議買點</span>
+        <span class="text-purple-400 font-bold">● 動態買點</span>
         <span class="text-red-400 font-bold">● 結構停損</span>
         <span class="text-emerald-400 font-bold">● T1目標</span>
         <span class="text-amber-400 font-bold">● T2二次翻倍</span>
@@ -493,7 +578,7 @@
               <span class="text-xs text-purple-300 font-semibold bg-purple-950/60 px-1.5 py-0.5 rounded border border-purple-800/50">${opp.tag.split(' ')[0]}</span>
             </div>
             <div class="text-xs text-gray-400 mt-1">
-              現價: $${opp.currentPrice > 0 ? opp.currentPrice.toFixed(2) : '--'} | 買點: <b class="text-purple-300">$${opp.entry > 0 ? opp.entry : '--'}</b>
+              現價: $${opp.currentPrice > 0 ? opp.currentPrice.toFixed(2) : '--'} | 動態買點: <b class="text-purple-300">$${opp.entry > 0 ? opp.entry : '--'}</b>
             </div>
           </div>
           <div class="text-right">
@@ -509,7 +594,7 @@
         <div class="bg-purple-950/20 border-2 border-purple-500/70 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-sm sm:text-base flex items-center gap-1.5">
-              <span>🎯</span> <span>${currentCode} ${stockProfiles[currentCode].name} 自動進場指引</span>
+              <span>🎯</span> <span>${currentCode} ${stockProfiles[currentCode].name} 動態定價指引</span>
             </span>
             <span class="text-xs bg-purple-900 text-purple-200 px-2 py-0.5 rounded-md font-bold">
               ${currentStockStructure.strategyType.split(' ')[0]}
@@ -518,20 +603,26 @@
 
           <div class="grid grid-cols-2 gap-2.5 pt-1 border-t border-purple-900/60">
             <div class="bg-gray-900/90 p-2.5 rounded-xl border border-purple-800/50">
-              <span class="text-purple-300 text-xs block font-bold">👉 建議進場點 (圖上紫線)</span>
+              <span class="text-purple-300 text-xs block font-bold">👉 動態建議買點 (圖上紫線)</span>
               <span class="text-white font-black text-base sm:text-lg font-mono mt-0.5 block">$${entry}</span>
-              <span class="text-xs text-gray-400 block mt-0.5">帶量實體站上即切入</span>
+              <span class="text-[11px] text-gray-400 block mt-0.5">${currentStockStructure.strategyType}</span>
             </div>
             <div class="bg-gray-900/90 p-2.5 rounded-xl border border-red-800/50">
               <span class="text-red-300 text-xs block font-bold">🛑 結構停損點 (圖上紅線)</span>
               <span class="text-red-400 font-black text-base sm:text-lg font-mono mt-0.5 block">$${stop}</span>
-              <span class="text-xs text-gray-400 block mt-0.5">實體收破此線立即砍倉</span>
+              <span class="text-[11px] text-gray-400 block mt-0.5">實體收破此線立即停損</span>
             </div>
+          </div>
+
+          <!-- 動態定價邏輯依據卡片 -->
+          <div class="bg-gray-900/80 p-2 rounded-xl border border-gray-800 text-[11px] sm:text-xs text-gray-300 leading-relaxed">
+            <span class="text-purple-400 font-bold block mb-0.5">💡 動態計算依據：</span>
+            ${currentStockStructure.rationale}
           </div>
 
           <div class="pt-1">
             <button onclick="addBatchFromHunter()" class="w-full py-2.5 text-xs sm:text-sm bg-blue-600 hover:bg-blue-500 active:scale-98 text-white rounded-xl font-bold transition shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5">
-              <span>💼</span> <span>將此進場點加入持倉簿記</span>
+              <span>💼</span> <span>將此動態買點加入持倉簿記</span>
             </button>
           </div>
         </div>
@@ -545,7 +636,7 @@
               🔄 重新掃描
             </button>
           </div>
-          <div class="space-y-1.5 max-h-[220px] overflow-y-auto pr-0.5">
+          <div class="space-y-1.5 max-h-[200px] overflow-y-auto pr-0.5">
             ${scannerListHtml || '<div class="text-gray-500 text-center py-6">雷達連線演算中...</div>'}
           </div>
         </div>
@@ -568,7 +659,7 @@
     }
 
     // ==============================================================
-    // 視圖 2：【持倉簿記模式】(大字排版、清晰損益、獨立增刪)
+    // 視圖 2：【持倉簿記模式】
     // ==============================================================
     function renderPortfolioMode() {
       clearPriceLines();
@@ -594,7 +685,6 @@
         <span class="text-amber-400 font-bold">● T2目標</span>
       `;
 
-      // 庫存切換膠囊
       const holdingCodes = Object.keys(stockProfiles).filter(c => (stockProfiles[c].batches || []).length > 0);
       const positionTabsHtml = holdingCodes.map(c => {
         const totalS = stockProfiles[c].batches.reduce((sum, b) => sum + (parseInt(b.shares) || 0), 0);
@@ -606,13 +696,11 @@
         `;
       }).join('');
 
-      // 生成每筆批次明細 (大字排版 + 易按刪除鈕)
       const batches = profile.batches || [];
       const batchListHtml = batches.map((batch, idx) => `
         <div id="batch-row-${batch.id}" class="bg-gray-800/50 p-2.5 rounded-xl border border-gray-700/60 flex items-center gap-2 text-xs sm:text-sm">
           <span class="text-xs font-mono font-bold text-gray-400 shrink-0 w-6">#${idx + 1}</span>
           
-          <!-- 買入價格 -->
           <div class="flex-1">
             <label class="text-xs text-gray-400 block mb-0.5 font-semibold">成本價</label>
             <input type="number" step="any" inputmode="decimal" value="${batch.cost}" 
@@ -620,7 +708,6 @@
                    class="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-white font-mono font-bold text-sm outline-none focus:border-blue-500" />
           </div>
 
-          <!-- 買入股數 -->
           <div class="flex-1">
             <label class="text-xs text-gray-400 block mb-0.5 font-semibold">持有股數</label>
             <input type="number" step="100" value="${batch.shares}" 
@@ -628,13 +715,11 @@
                    class="w-full bg-gray-900 border border-gray-700 rounded-lg px-2 py-1.5 text-white font-mono font-bold text-sm outline-none focus:border-blue-500" />
           </div>
 
-          <!-- 單批損益狀態 -->
           <div class="w-20 text-right shrink-0">
             <label class="text-xs text-gray-400 block mb-0.5 font-semibold">損益</label>
             <span id="batch-pnl-${batch.id}" class="font-mono text-xs sm:text-sm font-bold block">--</span>
           </div>
 
-          <!-- 刪除批次按鈕 -->
           <button onclick="removeBatch('${batch.id}')" title="刪除此筆批次" class="text-gray-400 hover:text-red-400 p-2 rounded-lg transition shrink-0 font-bold text-sm">
             ✕
           </button>
@@ -642,7 +727,6 @@
       `).join('');
 
       container.innerHTML = `
-        <!-- 頂部庫存切換 -->
         <div class="bg-gray-950/80 p-2.5 rounded-2xl border border-gray-800 space-y-2">
           <div class="flex justify-between items-center text-xs sm:text-sm">
             <span class="text-gray-400 font-bold flex items-center gap-1.5">
@@ -655,7 +739,6 @@
           </div>
         </div>
 
-        <!-- 總持倉加權統計看板 (大字清晰) -->
         <div class="bg-blue-950/20 border border-blue-800/60 p-3.5 rounded-2xl space-y-2.5 text-xs sm:text-sm">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-base sm:text-lg">${currentCode} ${profile.name} 總持倉結算</span>
@@ -683,7 +766,6 @@
           </div>
         </div>
 
-        <!-- 批次明細帳 (自由增刪) -->
         <div class="bg-gray-900/90 border border-gray-800 p-3 rounded-2xl space-y-2.5 text-xs sm:text-sm">
           <div class="flex justify-between items-center border-b border-gray-800 pb-2">
             <span class="font-bold text-gray-200 text-xs sm:text-sm flex items-center gap-1.5">
@@ -694,13 +776,11 @@
             </button>
           </div>
 
-          <!-- 批次清單容器 -->
           <div id="batch-list-container" class="space-y-2 max-h-[190px] overflow-y-auto pr-0.5">
             ${batchListHtml || '<div class="text-gray-500 text-center py-4 text-xs">尚無買進批次，點擊「＋ 新增批次」開始記帳</div>'}
           </div>
         </div>
 
-        <!-- T1 與 T2 獲利預估 (雙指標標示) -->
         <div class="space-y-2 text-xs sm:text-sm">
           <div class="bg-emerald-950/20 border border-emerald-800/40 p-2.5 rounded-xl flex justify-between items-center">
             <div>
@@ -735,7 +815,7 @@
 
       const defaultPrice = profile.batches.length > 0 
         ? profile.batches[profile.batches.length - 1].cost 
-        : currentStockStructure.currentPrice;
+        : currentStockStructure.suggestedEntry;
 
       const newId = 'b_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
       profile.batches.push({
@@ -758,7 +838,7 @@
         id: newId,
         cost: currentStockStructure.suggestedEntry,
         shares: 5000,
-        tag: '雷達切入'
+        tag: '動態切入'
       });
 
       saveProfiles();
