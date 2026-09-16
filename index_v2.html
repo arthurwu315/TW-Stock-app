@@ -77,9 +77,17 @@
       <div class="flex flex-wrap justify-between items-center text-xs sm:text-sm pb-2 border-b border-gray-800/80 gap-2 shrink-0">
         <div class="flex items-center gap-2">
           <span id="chart-info" class="font-bold text-white tracking-wide">連線中...</span>
-          <button id="btn-view-scope" onclick="toggleViewScope()" class="bg-blue-900/60 text-blue-200 border border-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm">
-            <span>🔭</span> <span>全景(含T1/T2)</span>
-          </button>
+          <div class="flex bg-gray-950 p-0.5 rounded-xl border border-gray-800 text-[11px] font-bold">
+            <button id="view-mode-FOCUS" onclick="setViewMode('FOCUS')" class="px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition flex items-center gap-1 shadow-sm">
+              <span>🔍</span> <span>聚焦K棒</span>
+            </button>
+            <button id="view-mode-T1" onclick="setViewMode('T1')" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+              <span>🎯</span> <span>T1視角</span>
+            </button>
+            <button id="view-mode-MACRO" onclick="setViewMode('MACRO')" class="px-2 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1">
+              <span>🔭</span> <span>T2全景</span>
+            </button>
+          </div>
           <button id="btn-chart-toggle" onclick="toggleChartDisplay()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1 rounded-lg text-xs font-semibold border border-gray-700">
             👁️ <span id="btn-chart-toggle-text">隱藏</span>
           </button>
@@ -93,7 +101,11 @@
         <div id="dynamic-legend" class="flex flex-wrap gap-2 text-xs font-semibold"></div>
       </div>
 
-      <div id="chart-box" class="w-full flex-1 min-h-[300px] md:min-h-0 mt-1.5 rounded-xl overflow-hidden transition-opacity duration-150"></div>
+      <div class="relative w-full flex-1 min-h-[300px] md:min-h-0 mt-1.5 rounded-xl overflow-hidden">
+        <div id="chart-box" class="w-full h-full min-h-[300px] md:min-h-0 transition-opacity duration-150"></div>
+        <!-- 畫面上方懸浮目標指引 (避開右側刻度 58px) -->
+        <div id="floating-targets" class="absolute top-2 right-14 flex flex-col gap-1.5 z-10 pointer-events-auto"></div>
+      </div>
       
       <div id="chart-hidden-placeholder" class="hidden w-full flex-1 flex flex-col items-center justify-center text-gray-500 gap-2 border border-dashed border-gray-800 py-12">
         <span class="text-3xl">👁️‍🗨️</span>
@@ -169,7 +181,7 @@
 
     let scannedOpportunities = [];
     let isScanning = false;
-    let isMacroView = true;
+    let currentViewMode = 'FOCUS'; // 預設聚焦K棒模式，保證K棒飽滿清晰
 
     let currentStockStructure = {
       currentPrice: 0,
@@ -205,21 +217,60 @@
         autoscaleInfoProvider: (original) => {
           const res = original();
           if (res !== null && res.priceRange !== null) {
-            let maxP = res.priceRange.maxValue;
             let minP = res.priceRange.minValue;
-            if (isMacroView) {
-              if (currentStockStructure.t1 > 0) maxP = Math.max(maxP, currentStockStructure.t1);
-              if (currentStockStructure.t2 > 0) maxP = Math.max(maxP, currentStockStructure.t2);
-              if (currentStockStructure.localLow > 0) minP = Math.min(minP, currentStockStructure.localLow);
-              if (currentStockStructure.suggestedStop > 0) minP = Math.min(minP, currentStockStructure.suggestedStop);
+            let maxP = res.priceRange.maxValue;
+
+            // 模式 1：【🔍 聚焦K棒】(預設) 僅以當前K棒與鄰近支撐防守定界，K棒巨大飽滿
+            if (currentViewMode === 'FOCUS') {
+              if (currentStockStructure.suggestedStop > 0 && currentStockStructure.suggestedStop < minP) {
+                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.995);
+              }
+              if (currentStockStructure.suggestedEntry > 0 && currentStockStructure.suggestedEntry > maxP) {
+                maxP = Math.max(maxP, currentStockStructure.suggestedEntry * 1.005);
+              }
+              return {
+                priceRange: {
+                  minValue: minP * 0.99,
+                  maxValue: maxP * 1.01
+                },
+                margins: res.margins
+              };
             }
-            return {
-              priceRange: {
-                minValue: minP * 0.98,
-                maxValue: maxP * 1.03
-              },
-              margins: res.margins
-            };
+            // 模式 2：【🎯 望向 T1】適度將縱軸推升至包含 T1 目標線 ($38.8)，K線依然清晰
+            else if (currentViewMode === 'T1') {
+              if (currentStockStructure.suggestedStop > 0) {
+                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.99);
+              }
+              if (currentStockStructure.t1 > 0) {
+                maxP = Math.max(maxP, currentStockStructure.t1 * 1.02);
+              }
+              return {
+                priceRange: {
+                  minValue: minP * 0.99,
+                  maxValue: maxP
+                },
+                margins: res.margins
+              };
+            }
+            // 模式 3：【🔭 T2 全景】涵蓋全部宏觀波段與二次亞當 ($54.7)
+            else if (currentViewMode === 'MACRO') {
+              if (currentStockStructure.suggestedStop > 0) {
+                minP = Math.min(minP, currentStockStructure.suggestedStop * 0.98);
+              }
+              if (currentStockStructure.localLow > 0) {
+                minP = Math.min(minP, currentStockStructure.localLow * 0.98);
+              }
+              if (currentStockStructure.t2 > 0) {
+                maxP = Math.max(maxP, currentStockStructure.t2 * 1.03);
+              }
+              return {
+                priceRange: {
+                  minValue: minP,
+                  maxValue: maxP
+                },
+                margins: res.margins
+              };
+            }
           }
           return res;
         }
@@ -237,18 +288,52 @@
       document.getElementById('chart-opacity-val').innerText = `${val}%`;
     }
 
-    function toggleViewScope() {
-      isMacroView = !isMacroView;
-      const btn = document.getElementById('btn-view-scope');
-      if (btn) {
-        btn.innerHTML = isMacroView ? '<span>🔭</span> <span>全景(含T1/T2)</span>' : '<span>🔍</span> <span>近景聚焦</span>';
-        btn.className = isMacroView 
-          ? 'bg-blue-900/60 text-blue-200 border border-blue-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm'
-          : 'bg-gray-800 text-gray-400 border border-gray-700 px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-sm';
-      }
+    function setViewMode(mode) {
+      currentViewMode = mode;
+      ['FOCUS', 'T1', 'MACRO'].forEach(m => {
+        const btn = document.getElementById(`view-mode-${m}`);
+        if (btn) {
+          btn.className = (m === mode)
+            ? 'px-2.5 py-1 rounded-lg bg-blue-600 text-white font-bold transition flex items-center gap-1 shadow-sm'
+            : 'px-2.5 py-1 rounded-lg text-gray-400 hover:text-white font-bold transition flex items-center gap-1';
+        }
+      });
+
+      updateFloatingBadges();
+
       if (candleSeries && chart) {
         candleSeries.applyOptions({});
         chart.priceScale('right').applyOptions({ autoScale: true });
+      }
+    }
+
+    function updateFloatingBadges() {
+      const container = document.getElementById('floating-targets');
+      if (!container) return;
+
+      const t1 = currentStockStructure.t1;
+      const t2 = currentStockStructure.t2;
+
+      if (currentViewMode === 'FOCUS') {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <button onclick="setViewMode('T1')" class="bg-emerald-950/90 hover:bg-emerald-900 border border-emerald-600/80 text-emerald-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🎯 望向 T1 ($${t1})</span> <span class="text-xs">↗</span>
+          </button>
+          <button onclick="setViewMode('MACRO')" class="bg-amber-950/90 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🏆 望向 T2 ($${t2})</span> <span class="text-xs">↗</span>
+          </button>
+        `;
+      } else if (currentViewMode === 'T1') {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <button onclick="setViewMode('MACRO')" class="bg-amber-950/90 hover:bg-amber-900 border border-amber-600/80 text-amber-300 px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-lg flex items-center gap-1.5 backdrop-blur-md transition active:scale-95">
+            <span>🏆 望向 T2 ($${t2})</span> <span class="text-xs">↗</span>
+          </button>
+        `;
+      } else {
+        container.classList.add('hidden');
+        container.innerHTML = '';
       }
     }
 
@@ -258,12 +343,15 @@
       const placeholder = document.getElementById('chart-hidden-placeholder');
       const btnText = document.getElementById('btn-chart-toggle-text');
 
+      const floatBadges = document.getElementById('floating-targets');
       if (isChartHidden) {
         box.classList.add('hidden');
+        if (floatBadges) floatBadges.classList.add('hidden');
         placeholder.classList.remove('hidden');
         btnText.innerText = '顯示';
       } else {
         box.classList.remove('hidden');
+        if (floatBadges) updateFloatingBadges();
         placeholder.classList.add('hidden');
         btnText.innerText = '隱藏';
         if (chart && box) chart.applyOptions({ width: box.clientWidth, height: box.clientHeight });
@@ -321,7 +409,8 @@
         renderActiveTimeframe();
         renderModeUI();
 
-        if (candleSeries && chart && isMacroView) {
+        updateFloatingBadges();
+        if (candleSeries && chart) {
           candleSeries.applyOptions({});
           chart.priceScale('right').applyOptions({ autoScale: true });
         }
