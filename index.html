@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>50檔高動能波段決策終端 (毛刺修剪穩定版)</title>
+  <title>50檔高動能波段決策終端 (B2加碼邏輯修正版)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
   <style>
@@ -138,7 +138,6 @@
   </div>
 
   <script>
-    // 精選 50 檔高動能母體庫
     const UNIVERSE_50 = {
       // AI 伺服器與核心硬體 (8檔)
       '2317': '鴻海', '2382': '廣達', '3231': '緯創', '6669': '緯穎',
@@ -169,12 +168,11 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v3';
+    const STORAGE_KEY = 'macro_trader_universe50_v4';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
 
-    // 內存快取 (避免頻繁切換耗盡 API 額度)
     const memoryKlinesCache = {};
 
     let rawDailyKlines = [];
@@ -193,6 +191,7 @@
       macroLow: 0,
       macroHigh: 0,
       localLow: 0,
+      localHigh: 0,
       boxH: 0,
       t1: 0,
       t2: 0,
@@ -354,7 +353,6 @@
       renderModeUI();
     }
 
-    // 核心資料加載函式 (快取優先、730天安全查詢)
     async function loadStock(code) {
       currentCode = code;
       const name = UNIVERSE_50[code] || (stockProfiles[code] ? stockProfiles[code].name : code);
@@ -367,7 +365,7 @@
       const select = document.getElementById('stock-select');
       if (select && select.value !== code) select.value = code;
 
-      // 1. 若快取存在，0 秒切換，絕不打 API
+      // 1. 若有內存快取，立即 0 秒呈現
       if (memoryKlinesCache[code] && memoryKlinesCache[code].length > 20) {
         renderLoadedKlines(code, memoryKlinesCache[code]);
         return;
@@ -570,6 +568,7 @@
       const curPrice = klines[klines.length - 1].close;
       const localSlice = klines.slice(-25);
       const lLow = Math.min(...localSlice.map(k => k.low));
+      const lHigh = Math.max(...localSlice.map(k => k.high));
 
       // 啟用毛刺修剪後的對稱目標演算
       const targets = calculateSymmetricTargets(klines, curPrice);
@@ -577,6 +576,7 @@
       currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
       currentStockStructure.macroHigh = parseFloat(targets.baseHigh.toFixed(2));
       currentStockStructure.localLow = parseFloat(lLow.toFixed(2));
+      currentStockStructure.localHigh = parseFloat(lHigh.toFixed(2));
       currentStockStructure.boxH = parseFloat(targets.boxH.toFixed(2));
 
       const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
@@ -851,16 +851,25 @@
       `;
     }
 
+    // ==============================================================
+    // 視圖 2：【持倉簿記模式】(B2 加碼點取用近期微觀頸線，絕不與 T2 撞線)
+    // ==============================================================
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
       const legend = document.getElementById('dynamic-legend');
       const profile = stockProfiles[currentCode] || { name: UNIVERSE_50[currentCode] || currentCode, batches: [] };
 
+      const curPrice = currentStockStructure.currentPrice;
       const stop = currentStockStructure.localLow;
       const t1 = currentStockStructure.t1;
       const t2 = currentStockStructure.t2;
-      const b2Trigger = currentStockStructure.macroHigh;
+
+      // 核心修正：B2 優先抓取近 25 日局部頸線 (Local High)，嚴格限制必須低於 T1，杜絕與 T2 撞線
+      let b2Trigger = currentStockStructure.localHigh;
+      if (!b2Trigger || b2Trigger <= curPrice || b2Trigger >= t1) {
+        b2Trigger = parseFloat(Math.min(t1 * 0.92, Math.max(curPrice * 1.025, (curPrice + t1) / 2)).toFixed(2));
+      }
 
       addLine(stop, '#ef4444', '【底座防守】', 0, 2);
       addLine(b2Trigger, '#c084fc', '👉【B2加碼點】', 0, 2);
@@ -1254,7 +1263,7 @@
       runFullAutoScanner();
     }
 
-    // 啟動保護：僅安全載入當前預設股票 (9945 潤泰新)，絕不自動併發掃描
+    // 啟動保護：僅安全加載單一預設標的 (9945 潤泰新)
     window.addEventListener('DOMContentLoaded', () => {
       initChart();
       renderStockSelect();
