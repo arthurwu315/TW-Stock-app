@@ -42,6 +42,7 @@
         <span class="text-sky-400">⚡</span> <span>決策終端</span>
       </span>
       
+      <!-- 三大核心功能切換 -->
       <div class="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-sm font-bold gap-1">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-3.5 py-1.5 rounded-lg bg-sky-500 text-white transition flex items-center gap-1.5 font-bold shadow">
           <span>🎯</span> <span>50檔雷達</span>
@@ -275,7 +276,8 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v13_strict_consolidation';
+    // 升級版本號，強制清除一切舊有不合理快取
+    const STORAGE_KEY = 'macro_trader_universe50_v14_financial_engine';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -335,7 +337,7 @@
     }
 
     async function smartFetchKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_v13_${code}`;
+      const cacheKey = `kline_cache_v14_${code}`;
 
       if (!forceRefresh) {
         try {
@@ -620,7 +622,7 @@
       rawDailyKlines = klines;
       currentStockStructure.currentPrice = rawDailyKlines[rawDailyKlines.length - 1].close;
 
-      analyzeStockStructure(rawDailyKlines);
+      analyzeStockStructure(rawDailyKlines, code);
       renderActiveTimeframe();
       renderModeUI();
 
@@ -637,11 +639,12 @@
     }
 
     // =========================================================================
-    // 核心演算：40日基準波動率分類 + 箱內外判定 + 實體橫盤檢驗
+    // 核心演算升級：台股金融資產專屬量化模型 (7% 上限 + 4.5% 乖離保護)
     // =========================================================================
-    function calculateSymmetricTargets(klines, curPrice, baseAtrPct) {
-      const recentSlice = klines.slice(-120);
+    function calculateSymmetricTargets(klines, curPrice, baseAtrPct, code = '') {
+      const isFinancial = code.startsWith('28') || code.startsWith('58') || code.startsWith('60');
 
+      const recentSlice = klines.slice(-120);
       const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
       const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
       const peakHigh = Math.max(...recentSlice.map(k => k.high));
@@ -654,21 +657,20 @@
       let baseLow = effectiveLow;
       let effectiveBoxH = effectiveHigh - effectiveLow;
 
-      // 依據 40 日「真實基準波動率」分類，杜絕短期急拉暴衝灌水
+      // 金融股強制限幅 7.0%
       let maxCapRatio = 0.16;
       let minBoxRatio = 0.05;
-      if (baseAtrPct < 1.9) {
-        maxCapRatio = 0.08; // 低波動金融傳產：單波上限鎖定 8%
-        minBoxRatio = 0.03;
+      if (isFinancial || baseAtrPct < 1.6) {
+        maxCapRatio = 0.07; // 金融資產單波測幅嚴格鎖死在 7.0%
+        minBoxRatio = 0.025;
       } else if (baseAtrPct < 3.2) {
-        maxCapRatio = 0.13; // 常態股
+        maxCapRatio = 0.13;
         minBoxRatio = 0.05;
       } else {
-        maxCapRatio = 0.18; // 高波動飆股
+        maxCapRatio = 0.18;
         minBoxRatio = 0.07;
       }
 
-      // 中繼平台識別
       if (klines.length >= 35) {
         const localSlice = klines.slice(-40);
         const lMaxBody = Math.max(...localSlice.map(k => Math.max(k.open, k.close)));
@@ -704,7 +706,9 @@
       return { baseHigh, baseLow, boxH: effectiveBoxH, rawT1, rawT2, isInsideBox };
     }
 
-    function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2) {
+    function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2, code = '') {
+      const isFinancial = code.startsWith('28') || code.startsWith('58') || code.startsWith('60');
+
       const len = klines.length;
       const curPrice = klines[len - 1].close;
 
@@ -719,7 +723,6 @@
       const atr14 = Math.max(0.1, trSum14 / atrPeriod);
       const atrPct = (atr14 / curPrice) * 100;
 
-      // 40 日長期基準 ATR%
       let trSum40 = 0;
       const period40 = Math.min(40, len - 1);
       for (let i = len - period40; i < len; i++) {
@@ -765,35 +768,35 @@
 
       const isTrueBullTrend = (curPrice >= ma60 && ma20 >= ma60 * 0.995);
 
-      // 動態過熱門檻 (依據 40 日基準波動率定錨)
+      // 金融股正乖離 > 4.5% 或 20日急拉 > 10% 視為極限過熱
       const bias20 = ((curPrice - ma20) / ma20) * 100;
       const price20Ago = klines[Math.max(0, len - 20)].close;
       const momentum20 = ((curPrice - price20Ago) / price20Ago) * 100;
-      const overheatBiasLimit = (baseAtrPct < 1.9) ? 5.5 : ((baseAtrPct < 3.2) ? 9.0 : 13.0);
-      const overheatMomLimit = (baseAtrPct < 1.9) ? 12.0 : ((baseAtrPct < 3.2) ? 20.0 : 30.0);
+
+      const overheatBiasLimit = isFinancial ? 4.5 : ((baseAtrPct < 1.9) ? 6.0 : ((baseAtrPct < 3.2) ? 9.0 : 13.0));
+      const overheatMomLimit = isFinancial ? 10.0 : ((baseAtrPct < 1.9) ? 14.0 : ((baseAtrPct < 3.2) ? 20.0 : 30.0));
       const isParabolicOverheat = (bias20 > overheatBiasLimit) || (momentum20 > overheatMomLimit);
 
-      // 真實橫盤底座檢驗：近 5 日高低差必須 <= 4.2% 且前方至少有 1 次觸碰
+      // 嚴格橫盤底座檢驗
       const last5 = klines.slice(-5);
       const last5Low = Math.min(...last5.map(k => k.low));
-      const isTightBase = ((mHigh - last5Low) / mHigh) <= 0.042;
-      const priorTouches = recentSlice.slice(0, -3).filter(k => k.high >= mHigh * 0.98).length;
+      const isTightBase = ((mHigh - last5Low) / mHigh) <= 0.035;
+      const priorTouches = recentSlice.slice(0, -3).filter(k => k.high >= mHigh * 0.985).length;
       const hasTrueConsolidationBase = isTightBase && (priorTouches >= 1);
 
       if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
         if (isParabolicOverheat || !hasTrueConsolidationBase) {
-          // 垂直噴發或無真底座保護：絕不在頂端追突破
-          type = '⚠️ 垂直暴衝·缺乏橫盤底座';
+          type = isFinancial ? '⚠️ 權值金融急衝·防乖離拉回' : '⚠️ 垂直暴衝·缺乏橫盤底座';
           const safePullback = Math.max(ma10, fib382);
-          entry = parseFloat((safePullback < curPrice ? safePullback : curPrice * 0.94).toFixed(2));
-          stop = parseFloat((Math.min(fib618, ma20) - 1.0 * atr14).toFixed(2));
-          rationale = `近20日暴衝 +${momentum20.toFixed(1)}%、正乖離達 ${bias20.toFixed(1)}%！無高檔橫盤底座，拒絕於最高點 $${mHigh} 追價；預約於 10MA/0.382位 ($${entry}) 回踩接刀${ceilingWarning}`;
+          entry = parseFloat((safePullback < curPrice ? safePullback : curPrice * 0.95).toFixed(2));
+          stop = parseFloat((Math.min(fib618, ma20) - 0.8 * atr14).toFixed(2));
+          rationale = `${isFinancial ? '金融股' : '個股'}短線暴衝 +${momentum20.toFixed(1)}%、正乖離達 ${bias20.toFixed(1)}%！無高檔橫盤底座，拒絕於天花板 $${mHigh} 追價；預約於 10MA/0.382位 ($${entry}) 回踩接刀${ceilingWarning}`;
           priority = 3;
         } else {
           type = '🚀 頸線動能突破/回踩';
           entry = parseFloat(mHigh.toFixed(2));
           stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-          rationale = `高檔完成緊湊水平換手並站穩頸線 $${mHigh}，以 1.2×ATR 設防洗停損${ceilingWarning}`;
+          rationale = `高檔完成水平換手並站穩頸線 $${mHigh}，以 1.2×ATR 設防洗停損${ceilingWarning}`;
           priority = 5;
         }
       } else if (curPrice <= lLow * 1.035) {
@@ -829,8 +832,7 @@
         priority = 2;
       }
 
-      // 風控下限保護：單筆風險金額不得小於現價 2.5% 或 1.2×ATR
-      const minRiskBuffer = Math.max(curPrice * 0.025, 1.2 * atr14);
+      const minRiskBuffer = Math.max(curPrice * 0.02, 1.0 * atr14);
       if (entry - stop < minRiskBuffer) {
         stop = parseFloat((entry - minRiskBuffer).toFixed(2));
       }
@@ -845,7 +847,7 @@
       };
     }
 
-    function analyzeStockStructure(klines) {
+    function analyzeStockStructure(klines, code = '') {
       if (klines.length < 30) return;
 
       const len = klines.length;
@@ -854,7 +856,6 @@
       const lLow = Math.min(...localSlice.map(k => k.low));
       const lHigh = Math.max(...localSlice.map(k => k.high));
 
-      // 40 日真實基準 ATR%
       let trSum40 = 0;
       const period40 = Math.min(40, len - 1);
       for (let i = len - period40; i < len; i++) {
@@ -865,7 +866,7 @@
       }
       const baseAtrPct = ((trSum40 / period40) / curPrice) * 100;
 
-      const targets = calculateSymmetricTargets(klines, curPrice, baseAtrPct);
+      const targets = calculateSymmetricTargets(klines, curPrice, baseAtrPct, code);
 
       currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
       currentStockStructure.macroHigh = parseFloat(targets.baseHigh.toFixed(2));
@@ -873,7 +874,7 @@
       currentStockStructure.localHigh = parseFloat(lHigh.toFixed(2));
       currentStockStructure.boxH = parseFloat(targets.boxH.toFixed(2));
 
-      const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
+      const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2, code);
       currentStockStructure.t1 = plan.t1;
       currentStockStructure.t2 = plan.t2;
       currentStockStructure.strategyType = plan.type;
@@ -935,13 +936,13 @@
           }
           const baseAtrPct = ((trSum40 / period40) / curClose) * 100;
 
-          const targets = calculateSymmetricTargets(klines, curClose, baseAtrPct);
-          const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
+          const targets = calculateSymmetricTargets(klines, curClose, baseAtrPct, code);
+          const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2, code);
           const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
 
           if (!isHolding) {
             if (plan.isTrappedUnderCeiling && plan.rr < 3.0) return;
-            if (plan.atrPct < 1.3) return;
+            if (plan.atrPct < 1.2) return;
             if (plan.avgVol5 < 1000) return;
             if (plan.rr < 2.0) return;
           }
