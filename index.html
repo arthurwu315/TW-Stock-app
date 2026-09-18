@@ -246,7 +246,8 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v8';
+    // 升級版本號以自動清除舊有被 7800 污染的暫存
+    const STORAGE_KEY = 'macro_trader_universe50_v9_corp_adjusted';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -279,6 +280,38 @@
       rrRatio: 0,
       rationale: ''
     };
+
+    // =========================================================================
+    // 核心引擎：自動除權息／股票分割還原演算法 (Corporate Action Auto-Adjuster)
+    // =========================================================================
+    function autoAdjustCorporateActions(klines) {
+      if (!klines || klines.length < 2) return klines;
+      const adjusted = klines.map(k => ({ ...k }));
+
+      for (let i = adjusted.length - 1; i > 0; i--) {
+        const prevClose = adjusted[i - 1].close;
+        const curOpen = adjusted[i].open;
+        if (prevClose <= 0 || curOpen <= 0) continue;
+
+        const gap = (curOpen - prevClose) / prevClose;
+
+        // 台股漲跌幅嚴格限制為 10.0%，隔夜跳空 > 10.5% 必為股票分割、大幅除權、減資換發
+        if (gap < -0.105 || gap > 0.105) {
+          const factor = curOpen / prevClose;
+          // 逆向等比等權平滑還原跳空日前所有的 K 棒數據
+          for (let j = 0; j < i; j++) {
+            adjusted[j].open = parseFloat((adjusted[j].open * factor).toFixed(2));
+            adjusted[j].high = parseFloat((adjusted[j].high * factor).toFixed(2));
+            adjusted[j].low = parseFloat((adjusted[j].low * factor).toFixed(2));
+            adjusted[j].close = parseFloat((adjusted[j].close * factor).toFixed(2));
+            if (adjusted[j].volume && factor > 0) {
+              adjusted[j].volume = Math.round(adjusted[j].volume / factor);
+            }
+          }
+        }
+      }
+      return adjusted;
+    }
 
     function initChart() {
       const box = document.getElementById('chart-box');
@@ -494,7 +527,7 @@
         const json = await res.json();
         if (!json.data || json.data.length === 0) throw new Error('查無數據');
 
-        const klines = json.data
+        const rawData = json.data
           .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
           .map(d => ({
             time: d.date,
@@ -505,7 +538,10 @@
             volume: d.Trading_Volume || d.volume || 0
           }));
 
-        if (klines.length < 10) throw new Error('有效K線不足');
+        if (rawData.length < 10) throw new Error('有效K線不足');
+
+        // 自動執行除權息/股票分割逆向還原
+        const klines = autoAdjustCorporateActions(rawData);
 
         memoryKlinesCache[code] = klines;
         renderLoadedKlines(code, klines);
@@ -535,13 +571,9 @@
       }, 100);
     }
 
-    // =========================================================================
-    // 核心演算：自適應波動率測幅 (ATR% 階梯上限) + 影線修剪 + 歷史頂部防禦
-    // =========================================================================
     function calculateSymmetricTargets(klines, curPrice, atrPct) {
       const recentSlice = klines.slice(-120);
 
-      // 1. 提取實體邊界與極端針頭 (Wick Shaving)
       const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
       const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
       const peakHigh = Math.max(...recentSlice.map(k => k.high));
@@ -555,21 +587,19 @@
       let baseLow = effectiveLow;
       let effectiveBoxH = effectiveHigh - effectiveLow;
 
-      // 波動率自適應動態上限 (防止金融/傳產牛皮股翻出天價)
       let maxCapRatio = 0.16;
       let minBoxRatio = 0.05;
       if (atrPct < 1.8) {
-        maxCapRatio = 0.09; // 金融傳產 (低 ATR%) 單波目標上限 8%~9%
+        maxCapRatio = 0.09;
         minBoxRatio = 0.03;
       } else if (atrPct < 3.0) {
-        maxCapRatio = 0.14; // 常態股 14%
+        maxCapRatio = 0.14;
         minBoxRatio = 0.05;
       } else {
-        maxCapRatio = 0.18; // 高動能成長股 18%
+        maxCapRatio = 0.18;
         minBoxRatio = 0.07;
       }
 
-      // 2. 中繼型態識別門檻調降至 18%，波段升幅 > 18% 即自動切入實體中繼平台
       if (macroSpan > 0.18 && klines.length >= 35) {
         const localSlice = klines.slice(-35);
         const lMaxBody = Math.max(...localSlice.map(k => Math.max(k.open, k.close)));
@@ -620,7 +650,6 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
-      // 天花板阻力檢驗
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -640,42 +669,34 @@
       let rationale = '';
       let priority = 1;
 
-// 1. 檢查是否為「低波動權值股短線急噴」
       const isLowVolSurge = (atrPct < 1.8) && (curPrice > ma20 * 1.05);
 
-      // 2. 計算垂直乖離與爆發指標 (防禦如創意的單邊仰角急衝)
-      const bias20 = ((curPrice - ma20) / ma20) * 100; // 距 20MA 正乖離率
+      const bias20 = ((curPrice - ma20) / ma20) * 100;
       const price20Ago = klines[Math.max(0, len - 20)].close;
-      const momentum20 = ((curPrice - price20Ago) / price20Ago) * 100; // 近 20 日暴衝幅度
-      
-      // 垂直拋物線過熱判定：正乖離 > 12% 或 20 日狂拉 > 30%
+      const momentum20 = ((curPrice - price20Ago) / price20Ago) * 100;
       const isParabolicOverheat = (bias20 > 12.0) || (momentum20 > 30.0);
-
-      // 3. 檢驗高點是否具備橫向換手底座 (非單日毛刺)
       const barsNearHigh = recentSlice.filter(k => k.high >= mHigh * 0.97).length;
-      const hasConsolidationBase = barsNearHigh >= 3; // 高檔至少需有 3 根 K 棒沉澱換手
+      const hasConsolidationBase = barsNearHigh >= 3;
 
-      // === 進入核心四階梯策略分支 ===
       if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
         if (isParabolicOverheat || !hasConsolidationBase) {
-          // 垂直噴發保護：即使在天花板，也絕不在最高點追單
           type = '⚠️ 垂直仰角過熱·等待回踩';
           const safePullback = Math.max(ma10, fib382);
           entry = parseFloat((safePullback < curPrice ? safePullback : curPrice * 0.92).toFixed(2));
           stop = parseFloat((Math.min(fib618, ma20) - 1.0 * atr14).toFixed(2));
-          rationale = `近20日暴衝 +${momentum20.toFixed(1)}%、正乖離達 ${bias20.toFixed(1)}%！無橫向底座，拒絕於最高點 $${mHigh} 追價；預約於 10MA/0.382位 ($${entry}) 回踩接刀${ceilingWarning}`;
+          rationale = `短線暴衝、正乖離達 ${bias20.toFixed(1)}%！無橫向底座，拒絕於最高點 $${mHigh} 追價；預約於 10MA/0.382位 ($${entry}) 回踩接刀${ceilingWarning}`;
           priority = 3;
         } else if (isLowVolSurge) {
           type = '⚠️ 權值金融急衝·防乖離拉回';
           entry = parseFloat(Math.max(ma10, fib382).toFixed(2));
           stop = parseFloat((entry - 1.2 * atr14).toFixed(2));
-          rationale = `低波動權值短線連拉、正乖離偏大；拒絕於天花板 $${mHigh} 追價，預約於 10MA ($${ma10.toFixed(2)}) 支撐掛單${ceilingWarning}`;
+          rationale = `低波動權值短線連拉；預約於 10MA ($${ma10.toFixed(2)}) 支撐掛單${ceilingWarning}`;
           priority = 3;
         } else {
           type = '🚀 頸線動能突破/回踩';
           entry = parseFloat(mHigh.toFixed(2));
           stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-          rationale = `高檔完成 ${barsNearHigh} 根實體換手並站穩頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
+          rationale = `高檔完成 ${barsNearHigh} 根實體換手並站穩頸線 $${mHigh}，以 1.2×ATR 設防洗停損${ceilingWarning}`;
           priority = 5;
         }
       } else if (curPrice <= lLow * 1.035) {
@@ -702,6 +723,7 @@
         rationale = `股價處於半山腰，拒絕追高；預約於 0.5 費氏位 $${entry} 限價接刀${ceilingWarning}`;
         priority = 2;
       }
+
       const risk = Math.max(0.1, parseFloat((entry - stop).toFixed(2)));
       const reward = Math.max(0.1, parseFloat((finalT1 - entry).toFixed(2)));
       const rr = parseFloat((reward / risk).toFixed(1));
@@ -721,7 +743,6 @@
       const lLow = Math.min(...localSlice.map(k => k.low));
       const lHigh = Math.max(...localSlice.map(k => k.high));
 
-      // 預先計算 ATR% 以驅動自適應測幅
       let trSum = 0;
       const atrPeriod = Math.min(14, len - 1);
       for (let i = len - atrPeriod; i < len; i++) {
@@ -732,7 +753,6 @@
       }
       const initialAtrPct = ((trSum / atrPeriod) / curPrice) * 100;
 
-      // 傳入 atrPct 調用自適應對稱目標
       const targets = calculateSymmetricTargets(klines, curPrice, initialAtrPct);
 
       currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
@@ -802,7 +822,7 @@
           if (item.isCached) {
             klines = rawData;
           } else {
-            klines = rawData
+            const rawCandles = rawData
               .filter(d => d.date && d.close > 0 && d.max > 0 && d.min > 0)
               .map(d => ({
                 time: d.date,
@@ -812,6 +832,8 @@
                 close: d.close,
                 volume: d.Trading_Volume || d.volume || 0
               }));
+            // 背景掃描同步執行分割還原
+            klines = autoAdjustCorporateActions(rawCandles);
             if (klines.length > 20) memoryKlinesCache[code] = klines;
           }
 
@@ -1336,9 +1358,6 @@
       }
     }
 
-    // =========================================================================
-    // 模組三：低價低估值選股引擎 (防本地快取、平滑 400ms 反饋、帶時間戳記)
-    // =========================================================================
     async function fetchValueScreenerData() {
       const btn = document.getElementById('btn-fetch-value');
       const btnImportAll = document.getElementById('btn-import-all-value');
