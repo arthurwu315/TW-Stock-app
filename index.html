@@ -123,7 +123,7 @@
     </section>
   </main>
 
-  <!-- 主工作區 2：【📊 低價低估值決策終端】 (含即時更新反饋與帶入功能) -->
+  <!-- 主工作區 2：【📊 低價低估值決策終端】 -->
   <main id="view-value-screener" class="w-full flex-1 hidden bg-slate-800/80 border border-slate-700/70 rounded-2xl p-4 sm:p-6 flex-col justify-between overflow-y-auto shadow-xl">
     <div class="space-y-4">
       <div class="flex flex-wrap justify-between items-center pb-4 border-b border-slate-700/80 gap-3">
@@ -246,7 +246,7 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v7';
+    const STORAGE_KEY = 'macro_trader_universe50_v8';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -535,9 +535,13 @@
       }, 100);
     }
 
-    function calculateSymmetricTargets(klines, curPrice) {
+    // =========================================================================
+    // 核心演算：自適應波動率測幅 (ATR% 階梯上限) + 影線修剪 + 歷史頂部防禦
+    // =========================================================================
+    function calculateSymmetricTargets(klines, curPrice, atrPct) {
       const recentSlice = klines.slice(-120);
 
+      // 1. 提取實體邊界與極端針頭 (Wick Shaving)
       const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
       const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
       const peakHigh = Math.max(...recentSlice.map(k => k.high));
@@ -551,8 +555,23 @@
       let baseLow = effectiveLow;
       let effectiveBoxH = effectiveHigh - effectiveLow;
 
-      if (macroSpan > 0.25 && klines.length >= 40) {
-        const localSlice = klines.slice(-40);
+      // 波動率自適應動態上限 (防止金融/傳產牛皮股翻出天價)
+      let maxCapRatio = 0.16;
+      let minBoxRatio = 0.05;
+      if (atrPct < 1.8) {
+        maxCapRatio = 0.09; // 金融傳產 (低 ATR%) 單波目標上限 8%~9%
+        minBoxRatio = 0.03;
+      } else if (atrPct < 3.0) {
+        maxCapRatio = 0.14; // 常態股 14%
+        minBoxRatio = 0.05;
+      } else {
+        maxCapRatio = 0.18; // 高動能成長股 18%
+        minBoxRatio = 0.07;
+      }
+
+      // 2. 中繼型態識別門檻調降至 18%，波段升幅 > 18% 即自動切入實體中繼平台
+      if (macroSpan > 0.18 && klines.length >= 35) {
+        const localSlice = klines.slice(-35);
         const lMaxBody = Math.max(...localSlice.map(k => Math.max(k.open, k.close)));
         const lMinBody = Math.min(...localSlice.map(k => Math.min(k.open, k.close)));
         const lPeak = Math.max(...localSlice.map(k => k.high));
@@ -561,9 +580,9 @@
         baseHigh = (lPeak > lMaxBody * 1.04) ? parseFloat((lMaxBody * 1.015).toFixed(2)) : lPeak;
         baseLow = (lTrough < lMinBody * 0.96) ? parseFloat((lMinBody * 0.985).toFixed(2)) : lTrough;
 
-        effectiveBoxH = Math.max(curPrice * 0.07, Math.min(baseHigh - baseLow, curPrice * 0.18));
+        effectiveBoxH = Math.max(curPrice * minBoxRatio, Math.min(baseHigh - baseLow, curPrice * maxCapRatio));
       } else {
-        effectiveBoxH = Math.min(effectiveBoxH, curPrice * 0.22);
+        effectiveBoxH = Math.min(effectiveBoxH, curPrice * maxCapRatio);
       }
 
       const rawT1 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
@@ -601,6 +620,7 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
+      // 天花板阻力檢驗
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -620,12 +640,23 @@
       let rationale = '';
       let priority = 1;
 
+      // 檢查是否為「低波動權值股短線急噴乖離過大」
+      const isLowVolSurge = (atrPct < 1.8) && (curPrice > ma20 * 1.05);
+
       if (curPrice >= mHigh * 0.985 && curPrice <= mHigh * 1.05) {
-        type = '🚀 頸線動能突破/回踩';
-        entry = parseFloat(mHigh.toFixed(2));
-        stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
-        rationale = `站穩實體頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
-        priority = 5;
+        if (isLowVolSurge) {
+          type = '⚠️ 權值金融急衝·防乖離拉回';
+          entry = parseFloat(Math.max(ma10, fib382).toFixed(2));
+          stop = parseFloat((entry - 1.2 * atr14).toFixed(2));
+          rationale = `低波動權值短線連拉、正乖離偏大；拒絕於天花板 $${mHigh} 追價，預約於 10MA ($${ma10.toFixed(2)}) 支撐掛單${ceilingWarning}`;
+          priority = 3;
+        } else {
+          type = '🚀 頸線動能突破/回踩';
+          entry = parseFloat(mHigh.toFixed(2));
+          stop = parseFloat((mHigh - 1.2 * atr14).toFixed(2));
+          rationale = `站穩實體頸線 $${mHigh}，以 1.2×ATR ($${(1.2*atr14).toFixed(2)}) 設防洗停損${ceilingWarning}`;
+          priority = 5;
+        }
       } else if (curPrice <= lLow * 1.035) {
         type = '🛡️ 底座止跌低吸點';
         entry = parseFloat((lLow + 0.3 * atr14).toFixed(2));
@@ -664,12 +695,25 @@
     function analyzeStockStructure(klines) {
       if (klines.length < 30) return;
 
-      const curPrice = klines[klines.length - 1].close;
+      const len = klines.length;
+      const curPrice = klines[len - 1].close;
       const localSlice = klines.slice(-25);
       const lLow = Math.min(...localSlice.map(k => k.low));
       const lHigh = Math.max(...localSlice.map(k => k.high));
 
-      const targets = calculateSymmetricTargets(klines, curPrice);
+      // 預先計算 ATR% 以驅動自適應測幅
+      let trSum = 0;
+      const atrPeriod = Math.min(14, len - 1);
+      for (let i = len - atrPeriod; i < len; i++) {
+        const h = klines[i].high;
+        const l = klines[i].low;
+        const prevC = klines[i - 1].close;
+        trSum += Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC));
+      }
+      const initialAtrPct = ((trSum / atrPeriod) / curPrice) * 100;
+
+      // 傳入 atrPct 調用自適應對稱目標
+      const targets = calculateSymmetricTargets(klines, curPrice, initialAtrPct);
 
       currentStockStructure.macroLow = parseFloat(targets.baseLow.toFixed(2));
       currentStockStructure.macroHigh = parseFloat(targets.baseHigh.toFixed(2));
@@ -755,13 +799,20 @@
             const curClose = klines[klines.length - 1].close;
             const lLow = Math.min(...klines.slice(-20).map(k => k.low));
 
-            const targets = calculateSymmetricTargets(klines, curClose);
+            let trSum = 0;
+            const atrPeriod = Math.min(14, klines.length - 1);
+            for (let i = klines.length - atrPeriod; i < klines.length; i++) {
+              trSum += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i-1].close), Math.abs(klines[i].low - klines[i-1].close));
+            }
+            const curAtrPct = ((trSum / atrPeriod) / curClose) * 100;
+
+            const targets = calculateSymmetricTargets(klines, curClose, curAtrPct);
             const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2);
             const isHolding = stockProfiles[code] && (stockProfiles[code].batches || []).length > 0;
 
             if (!isHolding) {
               if (plan.isTrappedUnderCeiling && plan.rr < 3.0) return;
-              if (plan.atrPct < 1.4) return;
+              if (plan.atrPct < 1.3) return;
               if (plan.avgVol5 < 1000) return;
               if (plan.rr < 2.0) return;
             }
@@ -1091,7 +1142,7 @@
             </div>
             <div class="text-right">
               <div id="port-t2-money" class="text-amber-400 font-black font-mono text-base">+-- 元</div>
-              <div id="port-t2-pct" class="text-amber-400/90 font-semibold text-xs font-mono">(+--%)</div>
+              <div id="port-t2-pct" class="text-amber-400/90 font-bold text-xs font-mono">(+--%)</div>
             </div>
           </div>
         </div>
@@ -1266,7 +1317,7 @@
     }
 
     // =========================================================================
-    // 模組三：低價低估值選股引擎 (強制 400ms 平滑反饋、防本地快取、帶時間戳記)
+    // 模組三：低價低估值選股引擎 (防本地快取、平滑 400ms 反饋、帶時間戳記)
     // =========================================================================
     async function fetchValueScreenerData() {
       const btn = document.getElementById('btn-fetch-value');
@@ -1285,16 +1336,13 @@
         </tr>
       `;
 
-      // 400ms 保障動畫展示，避免微秒級快取導致視覺上「毫無反應」
       const delayPromise = new Promise(r => setTimeout(r, 400));
-
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 20);
       const startStr = startDate.toISOString().split('T')[0];
 
       try {
         const fetchPromises = VALUE_CORE_POOL.map(async item => {
-          // 加入時間戳記 &_t 防靜態緩存，確保拿到市場真實結算價
           const url = `https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${item.code}&start_date=${startStr}&_t=${Date.now()}`;
           const res = await fetch(url);
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
