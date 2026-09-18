@@ -276,7 +276,8 @@
       }
     };
 
-    const STORAGE_KEY = 'macro_trader_universe50_v11_anti_trap';
+    // 升級版本號以清除舊設定，確保 100% 重新計算
+    const STORAGE_KEY = 'macro_trader_universe50_v12_box_fixed';
     let stockProfiles = JSON.parse(localStorage.getItem(STORAGE_KEY)) || defaultLedgerProfiles;
     let currentCode = '9945';
     let currentDashboardMode = 'HUNTER';
@@ -308,7 +309,6 @@
       rationale: ''
     };
 
-    // 自動除權息／股票分割逆向還原
     function autoAdjustCorporateActions(klines) {
       if (!klines || klines.length < 2) return klines;
       const adjusted = klines.map(k => ({ ...k }));
@@ -336,9 +336,8 @@
       return adjusted;
     }
 
-    // 雙軌智慧連線獲取 (直連 + 備用代理 + 4小時持久快取)
     async function smartFetchKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_v11_${code}`;
+      const cacheKey = `kline_cache_v12_box_fixed_${code}`;
 
       if (!forceRefresh) {
         try {
@@ -640,7 +639,7 @@
     }
 
     // =========================================================================
-    // 核心演算升級：中繼反彈阻力鎖定 + 季線多頭過濾 + 風控雜訊底限
+    // 核心演算：徹底修正「箱內築底」與「突破翻箱」邏輯
     // =========================================================================
     function calculateSymmetricTargets(klines, curPrice, atrPct) {
       const recentSlice = klines.slice(-120);
@@ -660,49 +659,54 @@
       let maxCapRatio = 0.16;
       let minBoxRatio = 0.05;
       if (atrPct < 1.8) {
-        maxCapRatio = 0.09;
+        maxCapRatio = 0.09; // 金融傳產
         minBoxRatio = 0.03;
       } else if (atrPct < 3.0) {
-        maxCapRatio = 0.14;
+        maxCapRatio = 0.14; // 常態股
         minBoxRatio = 0.05;
       } else {
-        maxCapRatio = 0.18;
+        maxCapRatio = 0.18; // 高波動科技
         minBoxRatio = 0.07;
       }
 
-      // 1. 中繼型態識別
-      if ((effectiveHigh - effectiveLow) / curPrice > 0.18 && klines.length >= 35) {
-        const localSlice = klines.slice(-35);
+      // 1. 中繼平台識別：若近 40 天有更近的實體震盪區間，優先取近期平台
+      if (klines.length >= 35) {
+        const localSlice = klines.slice(-40);
         const lMaxBody = Math.max(...localSlice.map(k => Math.max(k.open, k.close)));
         const lMinBody = Math.min(...localSlice.map(k => Math.min(k.open, k.close)));
         const lPeak = Math.max(...localSlice.map(k => k.high));
         const lTrough = Math.min(...localSlice.map(k => k.low));
 
-        baseHigh = (lPeak > lMaxBody * 1.04) ? parseFloat((lMaxBody * 1.015).toFixed(2)) : lPeak;
-        baseLow = (lTrough < lMinBody * 0.96) ? parseFloat((lMinBody * 0.985).toFixed(2)) : lTrough;
+        const lEffHigh = (lPeak > lMaxBody * 1.04) ? parseFloat((lMaxBody * 1.015).toFixed(2)) : lPeak;
+        const lEffLow = (lTrough < lMinBody * 0.96) ? parseFloat((lMinBody * 0.985).toFixed(2)) : lTrough;
 
-        effectiveBoxH = Math.max(curPrice * minBoxRatio, Math.min(baseHigh - baseLow, curPrice * maxCapRatio));
+        if (lEffHigh < effectiveHigh * 0.97) {
+          baseHigh = lEffHigh;
+          baseLow = lEffLow;
+          effectiveBoxH = Math.max(curPrice * minBoxRatio, Math.min(baseHigh - baseLow, curPrice * maxCapRatio));
+        } else {
+          effectiveBoxH = Math.min(effectiveBoxH, curPrice * maxCapRatio);
+        }
       } else {
         effectiveBoxH = Math.min(effectiveBoxH, curPrice * maxCapRatio);
       }
 
-      let rawT1 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
-      let rawT2 = parseFloat((rawT1 + effectiveBoxH).toFixed(2));
+      // 2. 核心幾何判定：判斷股價是在「箱體內部築底」還是「已突破頸線」
+      let rawT1, rawT2;
+      const isInsideBox = (curPrice < baseHigh * 0.98);
 
-      // 2. 核心修正：檢測「前方套牢山頭 (Intermediate Resistance Peak)」
-      // 若當前處於低檔築底區 (現價遠低於 120日高點 8% 以上)，優先鎖定近 60 日未解套的第一道反彈高點
-      if (klines.length >= 60 && curPrice < effectiveHigh * 0.92) {
-        const slice60 = klines.slice(-60);
-        const peak60 = Math.max(...slice60.map(k => k.high));
-        
-        // 若前方近 60 日存在明確高點且高於現價 3.5% 以上，T1 必須先錨定在該反彈山頭
-        if (peak60 > curPrice * 1.035 && peak60 < effectiveHigh * 0.96) {
-          rawT1 = parseFloat(peak60.toFixed(2));
-          rawT2 = parseFloat((rawT1 + Math.max(curPrice * minBoxRatio, (peak60 - baseLow) * 0.8)).toFixed(2));
-        }
+      if (isInsideBox) {
+        // 股價仍在箱體內（如台中銀在 19.35，箱頂在 21.15）：第一道目標 T1 必須是箱頂頸線本身！
+        rawT1 = parseFloat(baseHigh.toFixed(2));
+        // T2 才是突破箱頂後的對稱翻箱目標
+        rawT2 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
+      } else {
+        // 股價已站上或突破箱頂：T1 為第一層翻倍目標，T2 為第二層
+        rawT1 = parseFloat((baseHigh + effectiveBoxH).toFixed(2));
+        rawT2 = parseFloat((rawT1 + effectiveBoxH).toFixed(2));
       }
 
-      return { baseHigh, baseLow, boxH: effectiveBoxH, rawT1, rawT2 };
+      return { baseHigh, baseLow, boxH: effectiveBoxH, rawT1, rawT2, isInsideBox };
     }
 
     function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2) {
@@ -735,7 +739,6 @@
 
       const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / (5 * 1000);
 
-      // 天花板阻力檢驗
       const hMultiYear = Math.max(...klines.map(k => k.high));
       const isTrappedUnderCeiling = (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
 
@@ -757,7 +760,6 @@
 
       // 檢查是否為「真多頭」趨勢 (需站上季線且 20MA > 60MA)
       const isTrueBullTrend = (curPrice >= ma60 && ma20 >= ma60 * 0.995);
-
       const isLowVolSurge = (atrPct < 1.8) && (curPrice > ma20 * 1.05);
 
       const bias20 = ((curPrice - ma20) / ma20) * 100;
@@ -805,12 +807,11 @@
           rationale = `站上季線多頭發散，預約於 20MA ($${ma20.toFixed(2)}) 或 0.382 費氏位 ($${fib382}) 支撐掛單${ceilingWarning}`;
           priority = 3;
         } else {
-          // 季線下方：判定為築底反彈，非主升段
-          type = '⏳ 築底震盪·反彈測壓';
+          // 季線下方或箱內打底：判定為區間築底，停損守真實底座
+          type = '⏳ 箱體築底·反彈測頂';
           entry = parseFloat(Math.min(curPrice, Math.max(ma20, fib500)).toFixed(2));
-          // 嚴格停損：守結構底座 lLow，杜絕微小 0.3 元雜訊停損
-          stop = parseFloat(Math.min(lLow, entry - Math.max(curPrice * 0.035, 1.5 * atr14)).toFixed(2));
-          rationale = `股價於季線 ($${ma60.toFixed(2)}) 下方築底，短線金叉屬反彈；預約 20MA ($${entry})，停損守結構底座 $${stop}，T1 先看前方反彈山頭 $${finalT1}${ceilingWarning}`;
+          stop = parseFloat(Math.min(lLow, mLow).toFixed(2));
+          rationale = `股價於季線 ($${ma60.toFixed(2)}) 下方築底；預約於 20MA ($${entry}) 掛單，停損守結構底座 $${stop}，T1 看前方反彈箱頂 $${finalT1}${ceilingWarning}`;
           priority = 2;
         }
       } else {
@@ -823,7 +824,7 @@
         priority = 2;
       }
 
-      // 強制風控下限保護：單筆風險金額不得小於現價 2.5% 或 1.2×ATR，防止虛胖盈虧比
+      // 強制風控下限保護：單筆風險金額不得小於現價 2.5% 或 1.2×ATR
       const minRiskBuffer = Math.max(curPrice * 0.025, 1.2 * atr14);
       if (entry - stop < minRiskBuffer) {
         stop = parseFloat((entry - minRiskBuffer).toFixed(2));
