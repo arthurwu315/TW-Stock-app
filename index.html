@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro)</title>
+  <title>量化波段與雙向亞當對稱翻箱終端 (Crypto & Stocks Pro)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -28,7 +28,7 @@
             }
           },
           fontFamily: {
-            sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"SF Pro Text"', '"Segoe UI"', 'Roboto', 'sans-serif'],
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Segoe UI"', 'Roboto', 'sans-serif'],
             mono: ['"SF Mono"', 'Menlo', 'Monaco', 'Consolas', 'monospace']
           }
         }
@@ -44,7 +44,7 @@
       -webkit-font-smoothing: antialiased;
     }
     .glass-panel {
-      background: rgba(18, 20, 28, 0.82);
+      background: rgba(18, 20, 28, 0.85);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
       border: 1px solid rgba(255, 255, 255, 0.08);
@@ -65,20 +65,18 @@
     }
   </style>
 </head>
-<!-- 手機版允許整頁順暢滑動 (min-h-screen overflow-y-auto)，桌機/iPad (md:) 保持滿版 (md:h-screen md:overflow-hidden) -->
 <body class="min-h-screen md:h-screen w-screen overflow-y-auto md:overflow-hidden p-2 sm:p-3 flex flex-col gap-2.5">
 
-  <!-- 頂部 Apple 風格主操控列 (二層響應式設計，徹底杜絕單字被切斷換行) -->
+  <!-- 頂部 Apple 風格操控列 (二層式佈局，標籤絕不切字換行) -->
   <header class="glass-panel w-full rounded-2xl p-2.5 sm:px-4 sm:py-2.5 flex flex-col gap-2 shrink-0 shadow-2xl z-20">
-    <!-- 第一排：市場核心與主模式切換 -->
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2">
         <div class="w-7 h-7 rounded-xl bg-gradient-to-tr from-apple-blue to-apple-purple flex items-center justify-center shadow-md shrink-0">
-          <span class="text-white text-xs font-black">⚡</span>
+          <span class="text-white text-xs font-black">Δ</span>
         </div>
         <span class="text-xs font-black tracking-wider text-white hidden sm:inline whitespace-nowrap">ADAM QUANT</span>
         
-        <!-- 市場雙核心切換 (iOS 膠囊按鈕，加上 whitespace-nowrap 絕不折行) -->
+        <!-- 市場切換 -->
         <div class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-bold shrink-0">
           <button id="btn-market-crypto" onclick="switchMarket('CRYPTO')" class="px-3 py-1 rounded-lg bg-apple-blue text-white transition flex items-center gap-1.5 shadow-sm whitespace-nowrap">
             <span>🪙</span> <span>加密貨幣</span>
@@ -89,10 +87,10 @@
         </div>
       </div>
 
-      <!-- 三大核心模式標籤 -->
+      <!-- 三大核心功能模式 -->
       <div class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-bold shrink-0">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-2.5 sm:px-3 py-1 rounded-lg bg-white/15 text-white transition flex items-center gap-1 whitespace-nowrap">
-          <span>🎯</span> <span id="label-tab-hunter">精選雷達</span>
+          <span>🎯</span> <span id="label-tab-hunter">雙向雷達</span>
         </button>
         <button onclick="setDashboardMode('PORTFOLIO')" id="tab-PORTFOLIO" class="px-2.5 sm:px-3 py-1 rounded-lg text-apple-gray hover:text-white transition flex items-center gap-1 whitespace-nowrap">
           <span>💼</span> <span>持倉簿記</span>
@@ -103,14 +101,18 @@
       </div>
     </div>
 
-    <!-- 第二排：標的選擇、時框與金鑰設置 -->
+    <!-- 第二排：標的、時框與動態多空定性標記 -->
     <div id="chart-controls-cluster" class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-white/5">
       <div class="flex items-center gap-2 shrink-0">
         <select id="asset-select" onchange="switchAsset(this.value)" class="bg-black/60 border border-white/15 text-white font-mono text-xs rounded-xl px-2.5 py-1 font-bold focus:outline-none focus:border-apple-blue shadow-inner cursor-pointer">
         </select>
 
-        <!-- 時框選擇器 -->
         <div id="timeframe-container" class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-mono font-bold shrink-0">
+        </div>
+
+        <!-- 全自動多空定性徽章 (動態計算，無需人手切換) -->
+        <div id="regime-badge" class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 bg-white/5 border border-white/10 text-apple-gray">
+          <span>🔍</span> <span>結構辨識中</span>
         </div>
       </div>
 
@@ -126,24 +128,23 @@
     </div>
   </header>
 
-  <!-- 主工作區 1：圖表與決策操作台 (手機版高度充足，iPad/電腦版左右雙欄) -->
+  <!-- 主工作區 1：圖表與動態決策操作台 -->
   <main id="view-macro-chart" class="w-full flex-1 flex flex-col md:grid md:grid-cols-12 gap-2.5 min-h-0">
     
-    <!-- 左側 / 上方：TradingView 專業 K 線圖表 (手機版給予 h-[360px] 舒適高度) -->
+    <!-- 左側 K 線圖表 -->
     <section class="md:col-span-7 lg:col-span-8 glass-panel rounded-3xl p-3 sm:p-4 flex flex-col justify-between shadow-xl h-[360px] sm:h-[400px] md:h-full shrink-0 min-h-0 relative">
       
-      <!-- 圖表頂部指標與控制列 -->
+      <!-- 圖表指標與視角切換 -->
       <div class="flex flex-wrap justify-between items-center text-xs pb-2 border-b border-white/10 gap-2 shrink-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span id="chart-info" class="font-black text-white text-xs sm:text-sm tracking-wide font-mono">連線中...</span>
           
-          <!-- 三重視角切換 -->
           <div class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-[11px] font-bold shrink-0">
             <button id="view-mode-FOCUS" onclick="setViewMode('FOCUS')" class="px-2.5 py-0.5 rounded-lg bg-apple-blue text-white font-bold transition shadow-sm whitespace-nowrap">
               🔍 聚焦K棒
             </button>
             <button id="view-mode-T1" onclick="setViewMode('T1')" class="px-2.5 py-0.5 rounded-lg text-apple-gray hover:text-white font-bold transition whitespace-nowrap">
-              🎯 T1視角
+              🎯 T1滿足
             </button>
             <button id="view-mode-MACRO" onclick="setViewMode('MACRO')" class="px-2.5 py-0.5 rounded-lg text-apple-gray hover:text-white font-bold transition whitespace-nowrap">
               🔭 T2全景
@@ -154,7 +155,6 @@
             👁️ <span id="btn-chart-toggle-text">隱藏</span>
           </button>
 
-          <!-- 透明度滑桿 -->
           <div class="flex items-center gap-1.5 bg-black/40 px-2 py-0.5 rounded-lg border border-white/10 text-[11px]">
             <span class="text-apple-gray text-[10px]">透明度</span>
             <input type="range" min="10" max="100" value="100" oninput="changeChartOpacity(this.value)" class="w-14 sm:w-16 h-1 accent-apple-blue cursor-pointer" />
@@ -162,15 +162,12 @@
           </div>
         </div>
 
-        <!-- 動態圖例 -->
         <div id="dynamic-legend" class="flex flex-wrap gap-2 text-[11px] font-bold font-mono"></div>
       </div>
 
       <!-- K 線畫布容器 -->
       <div class="relative w-full flex-1 min-h-0 mt-2 rounded-2xl overflow-hidden bg-black/30">
         <div id="chart-box" class="w-full h-full transition-opacity duration-150"></div>
-        
-        <!-- 浮動按鈕移至左上角，徹底杜絕遮擋最新現價與右軸標籤 -->
         <div id="floating-targets" class="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10 pointer-events-auto"></div>
       </div>
       
@@ -181,7 +178,7 @@
       </div>
     </section>
 
-    <!-- 右側 / 下方：雙模操作面板 (在 iPad/電腦上 flex-1 填滿高度，在手機上順暢往下瀏覽) -->
+    <!-- 右側 雙向操作面板 (iPad/電腦高度完全延展，清單不截斷) -->
     <section class="md:col-span-5 lg:col-span-4 glass-panel rounded-3xl p-3 sm:p-4 flex flex-col justify-between gap-2.5 shadow-2xl min-h-[420px] md:min-h-0 md:h-full md:overflow-hidden">
       <div id="panel-content-container" class="flex-1 flex flex-col min-h-0 gap-2.5"></div>
       <div id="hud-bottom-card" class="glass-card p-3 rounded-2xl border border-white/10 text-xs space-y-1.5 shrink-0 font-mono shadow-inner"></div>
@@ -210,13 +207,11 @@
         </div>
       </div>
 
-      <!-- 篩選狀態即時提示列 -->
       <div id="screener-status-bar" class="text-xs font-mono text-apple-gray flex items-center justify-between bg-black/40 px-3 py-1.5 rounded-xl border border-white/5">
         <span>狀態：尚未開始</span>
         <span id="screener-timestamp">--</span>
       </div>
 
-      <!-- 數據表格區 -->
       <div class="overflow-x-auto rounded-2xl border border-white/10 bg-black/20 shadow-inner">
         <table class="w-full text-left border-collapse min-w-[650px] font-mono">
           <thead id="screener-table-head" class="border-b border-white/10 bg-white/[0.02] text-apple-gray text-xs font-bold">
@@ -272,7 +267,7 @@
           <span>🔑</span> <span>FinMind API 金鑰設定</span>
         </h3>
         <p class="text-xs text-apple-gray mt-1 leading-relaxed">
-          系統已內建自動備用代理。若填入個人金鑰可享有直連 600 次/小時額度。
+          系統已內建自動備用代理。填入金鑰可享有直連 600 次/小時額度。
         </p>
       </div>
 
@@ -292,7 +287,7 @@
 
   <script>
     // =========================================================================
-    // 1. 雙市場字典與資料庫配置
+    // 1. 資產清單與持久化儲存
     // =========================================================================
     const TW_STOCK_DICTIONARY = {
       '2330': '台積電', '2454': '聯發科', '2317': '鴻海', '2382': '廣達', '3231': '緯創',
@@ -324,21 +319,21 @@
       { code: '2609', name: '陽明', nav: 96.50 }
     ];
 
-    let currentMarket = 'CRYPTO'; // 預設直接開在比特幣
+    let currentMarket = 'CRYPTO';
     let currentCode = 'BTCUSDT';
-    let currentTimeframe = '1h'; // 加密貨幣預設 1小時；台股預設 D
+    let currentTimeframe = '1h';
     let currentDashboardMode = 'HUNTER';
     let currentViewMode = 'FOCUS';
 
-    const STORAGE_TW_KEY = 'macro_trader_universe50_v14_financial_engine';
-    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v14_portfolio';
+    const STORAGE_TW_KEY = 'macro_trader_universe50_v15_bidirectional';
+    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v15_bidirectional';
 
     let twProfiles = JSON.parse(localStorage.getItem(STORAGE_TW_KEY)) || {
-      '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, tag: '核心倉' }] }
+      '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, side: 'LONG', tag: '核心多單' }] }
     };
 
     let cryptoProfiles = JSON.parse(localStorage.getItem(STORAGE_CRYPTO_KEY)) || {
-      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 63800.0, shares: 0.35, tag: '首發突破倉' }] }
+      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 63800.0, shares: 0.35, side: 'LONG', tag: '突破多單' }] }
     };
 
     let UNIVERSE_TW = { ...TW_STOCK_DICTIONARY };
@@ -350,14 +345,17 @@
     let avgCostLine = null;
     let isChartHidden = false;
 
-    // 核心修復：台股與虛擬幣雷達機會清單絕對分離，嚴防資料互竄！
     let cryptoScannedOpportunities = [];
     let twScannedOpportunities = [];
     let isScanning = false;
     let currentQualifiedScreenerItems = [];
 
+    // 核心雙向結構儲存槽
     let currentStructure = {
       currentPrice: 0,
+      direction: 'LONG', // 'LONG' 或 'SHORT'
+      macroRegime: 'BULL', // 'BULL', 'BEAR', 'NEUTRAL'
+      regimeDesc: '',
       macroLow: 0,
       macroHigh: 0,
       localLow: 0,
@@ -373,7 +371,7 @@
     };
 
     // =========================================================================
-    // 2. 行情線路獲取 (幣安 API + FinMind API)
+    // 2. 雙軌即時 API 行情獲取
     // =========================================================================
     function autoAdjustCorporateActions(klines) {
       if (!klines || klines.length < 2) return klines;
@@ -400,7 +398,7 @@
     }
 
     async function fetchTWKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_tw_${code}`;
+      const cacheKey = `kline_cache_tw_v15_${code}`;
       if (!forceRefresh) {
         try {
           const cache = localStorage.getItem(cacheKey);
@@ -478,62 +476,21 @@
     }
 
     // =========================================================================
-    // 3. 亞當對稱翻箱自適應演算法 (1H 短線時框微型箱體，測幅目標合理化)
+    // 3. 全自動多空趨勢定性與雙向翻箱引擎 (關鍵突破升級！)
     // =========================================================================
-    function calculateSymmetricTargets(klines, curPrice, baseAtrPct, code = '') {
-      const isCrypto = (currentMarket === 'CRYPTO');
-      const isFinancial = !isCrypto && (code.startsWith('28') || code.startsWith('58') || code.startsWith('60'));
-
-      // 關鍵：加密貨幣在 1H 短線時框，鎖定最近 28 根 K 棒（約 1 天半換手區），絕不回溯到幾天前的極端大底
-      const lookback = (isCrypto && (currentTimeframe === '1h' || currentTimeframe === '15m'))
-        ? Math.min(28, klines.length)
-        : (isCrypto ? Math.min(50, klines.length) : Math.min(90, klines.length));
-
-      const recentSlice = klines.slice(-lookback);
-      const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
-      const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
-      const peakHigh = Math.max(...recentSlice.map(k => k.high));
-      const troughLow = Math.min(...recentSlice.map(k => k.low));
-
-      // 去除插針
-      const effectiveHigh = (peakHigh > maxBody * 1.04) ? (maxBody * 1.015) : peakHigh;
-      const effectiveLow = (troughLow < minBody * 0.96) ? (minBody * 0.985) : troughLow;
-
-      let baseHigh = effectiveHigh;
-      let baseLow = effectiveLow;
-      let effectiveBoxH = effectiveHigh - effectiveLow;
-
-      // 1H 短線比特幣單波箱高限制在 2.5% ~ 5.0%，確保目標務實且符合日內波段期望
-      let maxCapRatio = isCrypto ? (currentTimeframe === '1h' ? 0.05 : 0.10) : 0.15;
-      let minBoxRatio = isCrypto ? 0.018 : 0.035;
-
-      if (isFinancial) {
-        maxCapRatio = 0.07;
-        minBoxRatio = 0.025;
-      }
-
-      effectiveBoxH = Math.max(curPrice * minBoxRatio, Math.min(effectiveBoxH, curPrice * maxCapRatio));
-
-      const isInsideBox = (curPrice < baseHigh * 0.99);
-      let rawT1, rawT2;
-
-      if (isInsideBox) {
-        rawT1 = baseHigh;
-        rawT2 = baseHigh + effectiveBoxH;
-      } else {
-        rawT1 = baseHigh + effectiveBoxH;
-        rawT2 = rawT1 + effectiveBoxH;
-      }
-
-      return { baseHigh, baseLow, boxH: effectiveBoxH, rawT1, rawT2, isInsideBox };
-    }
-
-    function calculateDynamicPricing(klines, mLow, mHigh, lLow, t1, t2, code = '') {
+    function analyzeBidirectionalStructure(klines, code = '') {
+      if (!klines || klines.length < 25) return;
       const isCrypto = (currentMarket === 'CRYPTO');
       const isFinancial = !isCrypto && (code.startsWith('28') || code.startsWith('58') || code.startsWith('60'));
       const len = klines.length;
       const curPrice = klines[len - 1].close;
 
+      // 1. 計算均線矩陣
+      const ma10 = klines.slice(-10).reduce((s, k) => s + k.close, 0) / 10;
+      const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
+      const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma20;
+
+      // 2. 波動度與乖離率
       let trSum14 = 0;
       const atrPeriod = Math.min(14, len - 1);
       for (let i = len - atrPeriod; i < len; i++) {
@@ -541,124 +498,156 @@
       }
       const atr14 = Math.max(curPrice * 0.003, trSum14 / atrPeriod);
       const atrPct = (atr14 / curPrice) * 100;
+      const bias20 = ((curPrice - ma20) / ma20) * 100;
+      const bias60 = ((curPrice - ma60) / ma60) * 100;
 
-      const ma10 = klines.slice(-10).reduce((s, k) => s + k.close, 0) / 10;
-      const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
-
-      const recentSlice = klines.slice(-16);
-      const rHigh = Math.max(...recentSlice.map(k => k.high));
-      const rLow = Math.min(...recentSlice.map(k => k.low));
-      const fibDiff = rHigh - rLow;
-      const fib382 = rHigh - 0.382 * fibDiff;
-      const fib500 = rHigh - 0.500 * fibDiff;
-      const fib618 = rHigh - 0.618 * fibDiff;
-
-      const avgVol5 = klines.slice(-5).reduce((s, k) => s + (k.volume || 0), 0) / 5;
-
-      const hMultiYear = Math.max(...klines.map(k => k.high));
-      const isTrappedUnderCeiling = (!isCrypto) && (t1 > hMultiYear * 1.02) && (curPrice < hMultiYear * 0.90);
-
-      let finalT1 = t1;
-      let finalT2 = t2;
-      let ceilingWarning = '';
-
-      if (isTrappedUnderCeiling) {
-        finalT1 = hMultiYear * 0.96;
-        finalT2 = hMultiYear;
-        ceilingWarning = ` (⚠️ 上方受制波段大頂 $${formatPrice(hMultiYear)}，已壓制為真實目標)`;
+      // 3. 長線宏觀定性 (Macro Regime Detection)
+      let macroRegime = 'NEUTRAL';
+      let regimeDesc = '';
+      if (curPrice >= ma60 && ma20 >= ma60 * 0.99) {
+        macroRegime = 'BULL';
+        regimeDesc = '🟢 多頭主升浪 (生命線之上)';
+      } else if (curPrice < ma60 && ma20 < ma60) {
+        macroRegime = 'BEAR';
+        regimeDesc = '🔴 空頭下行浪 (生命線之下)';
+      } else {
+        macroRegime = 'NEUTRAL';
+        regimeDesc = '🟡 均線糾結·多空爭奪區';
       }
 
+      // 4. 短線幾何微型箱體識別 (Micro Box)
+      const lookback = (isCrypto && (currentTimeframe === '1h' || currentTimeframe === '15m'))
+        ? Math.min(28, len)
+        : (isCrypto ? Math.min(45, len) : Math.min(80, len));
+
+      const recentSlice = klines.slice(-lookback);
+      const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
+      const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
+      const peakHigh = Math.max(...recentSlice.map(k => k.high));
+      const troughLow = Math.min(...recentSlice.map(k => k.low));
+
+      const effectiveHigh = (peakHigh > maxBody * 1.04) ? (maxBody * 1.015) : peakHigh;
+      const effectiveLow = (troughLow < minBody * 0.96) ? (minBody * 0.985) : troughLow;
+
+      let boxH = effectiveHigh - effectiveLow;
+      const maxCapRatio = isCrypto ? (currentTimeframe === '1h' ? 0.05 : 0.09) : (isFinancial ? 0.07 : 0.14);
+      const minBoxRatio = isCrypto ? 0.018 : 0.035;
+      boxH = Math.max(curPrice * minBoxRatio, Math.min(boxH, curPrice * maxCapRatio));
+
+      // 5. 動態多空方向決策 (Direction Decision)
+      let direction = 'LONG';
       let entry = 0;
       let stop = 0;
+      let t1 = 0;
+      let t2 = 0;
       let type = '';
       let rationale = '';
       let priority = 1;
 
-      const bias20 = ((curPrice - ma20) / ma20) * 100;
-      const isOverheated = (bias20 > (isCrypto ? 6.5 : 4.5));
+      // 判斷是否為「真跌破空頭翻箱」
+      const isBreakingDown = (curPrice <= effectiveLow * 1.008);
+      const isBreakingUp = (curPrice >= effectiveHigh * 0.992);
 
-      if (curPrice >= mHigh * 0.99 && curPrice <= mHigh * 1.03) {
-        if (isOverheated) {
-          type = isCrypto ? '⚠️ 1H 短線急衝·防回測洗盤' : '⚠️ 垂直暴衝·缺乏橫盤底座';
-          const safePullback = Math.max(ma10, fib382);
-          entry = (safePullback < curPrice ? safePullback : curPrice * 0.985);
-          stop = Math.min(fib618, ma20) - 0.8 * atr14;
-          rationale = `1H 短線拉升正乖離達 ${bias20.toFixed(1)}%！拒絕追高，預約於 10MA 或 0.382 位 ($${formatPrice(entry)}) 回踩接單${ceilingWarning}`;
-          priority = 3;
-        } else {
-          type = '🚀 頸線動能突破/回踩';
-          entry = mHigh;
-          stop = mHigh - 1.2 * atr14;
-          rationale = `站穩 1H 關鍵頸線 $${formatPrice(mHigh)}，以 1.2×ATR 防洗停損，目標望向對稱滿足位${ceilingWarning}`;
+      if (macroRegime === 'BEAR') {
+        // 【空頭市場規則】：禁止順勢追多，只允許破位放空或超跌極限短打
+        if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98) {
+          // 長空短超跌
+          direction = 'LONG';
+          type = '⚡ 負乖離過大·超跌搶反彈';
+          entry = curPrice;
+          stop = curPrice - 1.0 * atr14;
+          t1 = Math.min(effectiveLow, ma20);
+          t2 = ma20;
+          rationale = `長線處於 60MA 之下，但 20MA 負乖離達 ${bias20.toFixed(1)}%！出現短線超賣；僅允許以 1.0×ATR 小額博弈反彈至 20MA，嚴禁波段長抱！`;
+          priority = 2;
+        } else if (isBreakingDown) {
+          // 標準空頭翻箱 (向下等幅對稱測幅)
+          direction = 'SHORT';
+          type = isCrypto ? '📉 破位下殺·亞當反向翻箱' : '📉 破位下殺·融券放空/避險';
+          entry = effectiveLow;
+          stop = effectiveLow + 1.2 * atr14; // 收回箱體上方即停損
+          t1 = effectiveLow - boxH;          // 向下翻出 1 倍箱高
+          t2 = t1 - boxH;                    // 向下翻出 2 倍箱高
+          rationale = `生命線空頭排列，且 1H 實體正式收破箱底座 $${formatPrice(effectiveLow)}！支撐轉為強壓力，啟動亞當反向下翻測幅，T1 下看 $${formatPrice(t1)}`;
           priority = 5;
+        } else {
+          // 破位後反抽壓力位受阻空
+          direction = 'SHORT';
+          type = '⚠️ 弱勢反抽·阻力承壓空';
+          entry = Math.min(curPrice, effectiveHigh);
+          stop = entry + 1.2 * atr14;
+          t1 = effectiveLow;
+          t2 = effectiveLow - boxH;
+          rationale = `長線空方掌控，短線反抽至均線 ($${formatPrice(ma20)}) 遇阻；逢高掛單佈局空單，停損設於壓力上方`;
+          priority = 4;
         }
-      } else if (curPrice <= lLow * 1.02) {
-        type = '🛡️ 底座止跌低吸點';
-        entry = lLow + 0.3 * atr14;
-        stop = lLow - 0.7 * atr14;
-        rationale = `回踩近期 1H 箱體底座 $${formatPrice(lLow)}，防守明確且停損空間小${ceilingWarning}`;
-        priority = 4;
-      } else if (curPrice >= ma20) {
-        type = '📈 多頭均線/0.382回踩';
-        const sup = Math.max(ma20, fib382);
-        entry = (sup < curPrice) ? sup : Math.max(ma20, fib500);
-        if (entry >= curPrice) entry = curPrice - 0.3 * atr14;
-        stop = Math.min(fib618, entry - 1.0 * atr14);
-        rationale = `沿 20 均線順勢發散，預約於 20MA ($${formatPrice(ma20)}) 或 0.382 支撐位 ($${formatPrice(fib382)}) 掛單${ceilingWarning}`;
-        priority = 3;
       } else {
-        type = '⏳ 箱體築底·區間掛單';
-        entry = (fib500 < curPrice) ? fib500 : (curPrice - 0.5 * atr14);
-        stop = Math.min(lLow, entry - 1.2 * atr14);
-        rationale = `處於 1H 震盪箱體內部，等待回踩 0.5 費氏位 $${formatPrice(entry)} 限價承接${ceilingWarning}`;
-        priority = 2;
+        // 【多頭或中性震盪市場規則】：順勢向上翻箱做多
+        direction = 'LONG';
+        if (bias20 > (isCrypto ? 6.5 : 4.5) && isBreakingUp) {
+          type = '⚠️ 短線暴衝·防插針拉回';
+          const safePullback = Math.max(ma10, effectiveHigh * 0.985);
+          entry = safePullback;
+          stop = Math.max(effectiveLow, entry - 1.2 * atr14);
+          t1 = effectiveHigh + boxH;
+          t2 = t1 + boxH;
+          rationale = `短線暴衝正乖離達 ${bias20.toFixed(1)}%！無密集底座支撐，拒絕追高，預約於 10MA ($${formatPrice(entry)}) 回踩接單`;
+          priority = 3;
+        } else if (isBreakingUp) {
+          type = '🚀 頸線突破·亞當向上翻倍';
+          entry = effectiveHigh;
+          stop = effectiveHigh - 1.2 * atr14;
+          t1 = effectiveHigh + boxH;
+          t2 = t1 + boxH;
+          rationale = `均線多頭發散，放量站穩水平頸線 $${formatPrice(effectiveHigh)}！以 1.2×ATR 設防洗停損，向上對稱翻出首波目標 $${formatPrice(t1)}`;
+          priority = 5;
+        } else if (curPrice <= effectiveLow * 1.02) {
+          type = '🛡️ 底座止跌·極限低吸';
+          entry = effectiveLow + 0.3 * atr14;
+          stop = effectiveLow - 0.7 * atr14;
+          t1 = effectiveHigh;
+          t2 = effectiveHigh + boxH;
+          rationale = `回測多頭密集底座 $${formatPrice(effectiveLow)}，盈虧比極佳，停損嚴格守破底`;
+          priority = 4;
+        } else {
+          type = '📈 順勢均線·回踩佈局';
+          entry = Math.max(ma20, curPrice - 0.4 * atr14);
+          stop = Math.min(effectiveLow, entry - 1.2 * atr14);
+          t1 = effectiveHigh + boxH;
+          t2 = t1 + boxH;
+          rationale = `處於 20 均線上方順勢運行，於 20MA ($${formatPrice(ma20)}) 附近限價掛單承接`;
+          priority = 3;
+        }
       }
 
-      const minRiskBuffer = Math.max(curPrice * 0.007, 0.7 * atr14);
-      if (entry - stop < minRiskBuffer) stop = entry - minRiskBuffer;
-
-      const risk = Math.max(curPrice * 0.002, entry - stop);
-      const reward = Math.max(curPrice * 0.002, finalT1 - entry);
+      // 6. 風險與盈虧比計算 (支援雙向)
+      let risk, reward;
+      if (direction === 'SHORT') {
+        risk = Math.max(curPrice * 0.003, stop - entry);
+        reward = Math.max(curPrice * 0.003, entry - t1);
+      } else {
+        risk = Math.max(curPrice * 0.003, entry - stop);
+        reward = Math.max(curPrice * 0.003, t1 - entry);
+      }
       const rr = parseFloat((reward / risk).toFixed(1));
-
-      return {
-        entry, stop, type, rationale, priority, rr, avgVol5, atrPct,
-        t1: finalT1, t2: finalT2, isTrappedUnderCeiling
-      };
-    }
-
-    function analyzeStockStructure(klines, code = '') {
-      if (!klines || klines.length < 20) return;
-      const len = klines.length;
-      const curPrice = klines[len - 1].close;
-      const localSlice = klines.slice(-18);
-      const lLow = Math.min(...localSlice.map(k => k.low));
-      const lHigh = Math.max(...localSlice.map(k => k.high));
-
-      let trSum40 = 0;
-      const period40 = Math.min(30, len - 1);
-      for (let i = len - period40; i < len; i++) {
-        trSum40 += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close));
-      }
-      const baseAtrPct = ((trSum40 / period40) / curPrice) * 100;
-
-      const targets = calculateSymmetricTargets(klines, curPrice, baseAtrPct, code);
-      const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2, code);
 
       currentStructure = {
         currentPrice: curPrice,
-        macroLow: targets.baseLow,
-        macroHigh: targets.baseHigh,
-        localLow: lLow,
-        localHigh: lHigh,
-        boxH: targets.boxH,
-        t1: plan.t1,
-        t2: plan.t2,
-        strategyType: plan.type,
-        suggestedEntry: plan.entry,
-        suggestedStop: plan.stop,
-        rrRatio: plan.rr,
-        rationale: plan.rationale
+        direction,
+        macroRegime,
+        regimeDesc,
+        macroLow: effectiveLow,
+        macroHigh: effectiveHigh,
+        localLow: minBody,
+        localHigh: maxBody,
+        boxH,
+        t1,
+        t2,
+        strategyType: type,
+        suggestedEntry: entry,
+        suggestedStop: stop,
+        rrRatio: rr,
+        rationale
       };
     }
 
@@ -682,7 +671,7 @@
         rightPriceScale: {
           borderColor: 'rgba(255, 255, 255, 0.1)',
           autoScale: true,
-          scaleMargins: { top: 0.12, bottom: 0.12 }
+          scaleMargins: { top: 0.14, bottom: 0.14 }
         },
         timeScale: {
           borderColor: 'rgba(255, 255, 255, 0.1)',
@@ -712,16 +701,26 @@
           let maxP = res.priceRange.maxValue;
 
           if (currentViewMode === 'FOCUS') {
-            if (currentStructure.suggestedStop > 0) minP = Math.min(minP, currentStructure.suggestedStop * 0.996);
-            if (currentStructure.suggestedEntry > 0) maxP = Math.max(maxP, currentStructure.suggestedEntry * 1.004);
+            if (currentStructure.suggestedStop > 0) {
+              minP = Math.min(minP, currentStructure.suggestedStop * 0.996);
+              maxP = Math.max(maxP, currentStructure.suggestedStop * 1.004);
+            }
+            if (currentStructure.suggestedEntry > 0) {
+              minP = Math.min(minP, currentStructure.suggestedEntry * 0.996);
+              maxP = Math.max(maxP, currentStructure.suggestedEntry * 1.004);
+            }
             return { priceRange: { minValue: minP * 0.995, maxValue: maxP * 1.005 }, margins: res.margins };
           } else if (currentViewMode === 'T1') {
-            if (currentStructure.suggestedStop > 0) minP = Math.min(minP, currentStructure.suggestedStop * 0.99);
-            if (currentStructure.t1 > 0) maxP = Math.max(maxP, currentStructure.t1 * 1.015);
+            if (currentStructure.t1 > 0) {
+              minP = Math.min(minP, currentStructure.t1 * 0.99);
+              maxP = Math.max(maxP, currentStructure.t1 * 1.01);
+            }
             return { priceRange: { minValue: minP, maxValue: maxP }, margins: res.margins };
           } else if (currentViewMode === 'MACRO') {
-            if (currentStructure.macroLow > 0) minP = Math.min(minP, currentStructure.macroLow * 0.98);
-            if (currentStructure.t2 > 0) maxP = Math.max(maxP, currentStructure.t2 * 1.02);
+            if (currentStructure.t2 > 0) {
+              minP = Math.min(minP, currentStructure.t2 * 0.985);
+              maxP = Math.max(maxP, currentStructure.t2 * 1.015);
+            }
             return { priceRange: { minValue: minP, maxValue: maxP }, margins: res.margins };
           }
           return res;
@@ -803,19 +802,12 @@
       if (candleSeries && chart && rawKlines.length > 0) {
         const totalBars = rawKlines.length;
         if (mode === 'FOCUS') {
-          chart.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, totalBars - 32),
-            to: totalBars + 4
-          });
+          chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, totalBars - 32), to: totalBars + 4 });
         } else if (mode === 'T1') {
-          chart.timeScale().setVisibleLogicalRange({
-            from: Math.max(0, totalBars - 55),
-            to: totalBars + 6
-          });
+          chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, totalBars - 55), to: totalBars + 6 });
         } else if (mode === 'MACRO') {
           chart.timeScale().fitContent();
         }
-
         candleSeries.applyOptions({});
         chart.priceScale('right').applyOptions({ autoScale: true });
       }
@@ -827,22 +819,25 @@
 
       const t1 = formatPrice(currentStructure.t1);
       const t2 = formatPrice(currentStructure.t2);
+      const isShort = (currentStructure.direction === 'SHORT');
+      const arrow = isShort ? '↘' : '↗';
+      const badgeColor = isShort ? 'text-apple-red border-apple-red/40' : 'text-apple-green border-apple-green/40';
 
       if (currentViewMode === 'FOCUS') {
         container.classList.remove('hidden');
         container.innerHTML = `
-          <button onclick="setViewMode('T1')" class="glass-panel text-apple-green px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border border-apple-green/40 backdrop-blur-md">
-            <span>🎯 望向 T1 ($${t1})</span> <span>↗</span>
+          <button onclick="setViewMode('T1')" class="glass-panel ${badgeColor} px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border backdrop-blur-md">
+            <span>🎯 望向 T1 ($${t1})</span> <span>${arrow}</span>
           </button>
-          <button onclick="setViewMode('MACRO')" class="glass-panel text-apple-amber px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border border-apple-amber/40 backdrop-blur-md">
-            <span>🏆 望向 T2 ($${t2})</span> <span>↗</span>
+          <button onclick="setViewMode('MACRO')" class="glass-panel text-apple-amber border-apple-amber/40 px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border backdrop-blur-md">
+            <span>🏆 望向 T2 ($${t2})</span> <span>${arrow}</span>
           </button>
         `;
       } else if (currentViewMode === 'T1') {
         container.classList.remove('hidden');
         container.innerHTML = `
-          <button onclick="setViewMode('MACRO')" class="glass-panel text-apple-amber px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border border-apple-amber/40 backdrop-blur-md">
-            <span>🏆 望向 T2 ($${t2})</span> <span>↗</span>
+          <button onclick="setViewMode('MACRO')" class="glass-panel text-apple-amber border-apple-amber/40 px-2.5 py-1 rounded-xl text-[11px] font-mono font-bold shadow-lg flex items-center gap-1 active:scale-95 border backdrop-blur-md">
+            <span>🏆 望向 T2 ($${t2})</span> <span>${arrow}</span>
           </button>
         `;
       } else {
@@ -852,7 +847,7 @@
     }
 
     // =========================================================================
-    // 5. 標的載入與雙模操作台渲染 (雷達列表空間完全釋放)
+    // 5. 標的載入與雙模操作台 (雙向亞當完整適配)
     // =========================================================================
     async function loadAsset(code, forceRefresh = false) {
       currentCode = code;
@@ -871,10 +866,19 @@
         rawKlines = klines;
         currentStructure.currentPrice = rawKlines[rawKlines.length - 1].close;
 
-        analyzeStockStructure(rawKlines, code);
+        analyzeBidirectionalStructure(rawKlines, code);
         renderActiveTimeframe();
         renderModeUI();
         setViewMode('FOCUS');
+
+        // 更新頂部全自動定性標籤
+        const badge = document.getElementById('regime-badge');
+        if (badge) {
+          const isShort = (currentStructure.direction === 'SHORT');
+          badge.className = `px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 border ${isShort ? 'bg-rose-950/80 text-apple-red border-apple-red/40' : 'bg-emerald-950/80 text-apple-green border-apple-green/40'}`;
+          badge.innerHTML = `<span>${isShort ? '🔴' : '🟢'}</span> <span>${currentStructure.direction === 'SHORT' ? '空頭翻箱 (SHORT)' : '多頭翻箱 (LONG)'}</span>`;
+        }
+
       } catch (err) {
         document.getElementById('chart-info').innerHTML = `
           <span class="text-apple-red font-bold">${code} 連線異常</span>
@@ -925,7 +929,7 @@
       else if (currentDashboardMode === 'PORTFOLIO') renderPortfolioMode();
     }
 
-    // --- HUNTER 雷達模式 (在手機/iPad上完整展開，不再被截斷) ---
+    // --- HUNTER 雷達模式 (雙向動態線位) ---
     function renderHunterMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -936,20 +940,20 @@
       const stop = currentStructure.suggestedStop;
       const t1 = currentStructure.t1;
       const t2 = currentStructure.t2;
+      const isShort = (currentStructure.direction === 'SHORT');
 
-      addLine(entry, '#bf5af2', '👉【建議買點】', 0, 2);
-      addLine(stop, '#ff453a', '🛑【結構停損】', 0, 2);
-      addLine(t1, '#30d158', '🎯【T1滿足】', 2, 2);
-      addLine(t2, '#ffd60a', '🏆【T2翻倍】', 2, 2);
+      addLine(entry, '#bf5af2', isShort ? '👉【空單建倉價】' : '👉【多單建議買點】', 0, 2);
+      addLine(stop, '#ff453a', isShort ? '🛑【空單防守停損】' : '🛑【多單結構停損】', 0, 2);
+      addLine(t1, '#30d158', isShort ? '🎯【T1下翻止盈】' : '🎯【T1首波滿足】', 2, 2);
+      addLine(t2, '#ffd60a', isShort ? '🏆【T2二次下翻】' : '🏆【T2二次翻倍】', 2, 2);
 
       legend.innerHTML = `
-        <span class="text-apple-purple">● 買點</span>
-        <span class="text-apple-red">● 停損</span>
-        <span class="text-apple-green">● T1</span>
-        <span class="text-apple-amber">● T2</span>
+        <span class="text-apple-purple">● ${isShort ? '空單開倉' : '多單買點'}</span>
+        <span class="text-apple-red">● 停損防守</span>
+        <span class="text-apple-green">● T1目標</span>
+        <span class="text-apple-amber">● T2目標</span>
       `;
 
-      // 核心隔離：根據市場只抓取對應清單，絕不互竄！
       const isCrypto = (currentMarket === 'CRYPTO');
       const opportunities = isCrypto ? cryptoScannedOpportunities : twScannedOpportunities;
 
@@ -964,7 +968,7 @@
           </div>
         `;
       } else {
-        scannerListHtml = opportunities.slice(0, 20).map((opp, idx) => `
+        scannerListHtml = opportunities.slice(0, 25).map((opp, idx) => `
           <div onclick="switchAsset('${opp.code}')" class="p-2.5 rounded-2xl cursor-pointer transition flex items-center justify-between border ${opp.code === currentCode ? 'bg-apple-blue/25 border-apple-blue shadow-md' : 'bg-black/40 border-white/5 hover:bg-white/5'}">
             <div>
               <div class="flex items-center gap-1.5">
@@ -973,9 +977,10 @@
                 </span>
                 <span class="font-black text-white text-xs sm:text-sm font-mono">${opp.code}</span>
                 <span class="text-[11px] text-apple-gray font-semibold">${opp.name}</span>
+                <span class="text-[10px] px-1.5 py-0.2 rounded font-bold ${opp.direction === 'SHORT' ? 'bg-rose-950 text-apple-red border border-apple-red/40' : 'bg-emerald-950 text-apple-green border border-apple-green/40'}">${opp.direction}</span>
               </div>
               <div class="text-[11px] text-apple-gray mt-0.5 font-mono">
-                現價: <b class="text-white">$${formatPrice(opp.currentPrice)}</b> | 買點: <b class="text-apple-purple font-bold">$${formatPrice(opp.entry)}</b>
+                現價: <b class="text-white">$${formatPrice(opp.currentPrice)}</b> | ${opp.direction === 'SHORT' ? '空點' : '買點'}: <b class="text-apple-purple font-bold">$${formatPrice(opp.entry)}</b>
               </div>
             </div>
             <div class="text-right font-mono">
@@ -989,20 +994,20 @@
       }
 
       container.innerHTML = `
-        <!-- 動態定價卡片 (緊湊精緻，不浪費垂直空間) -->
-        <div class="glass-card p-3 rounded-2xl space-y-2 border border-apple-purple/40 shadow-lg shrink-0">
+        <!-- 動態定價卡片 -->
+        <div class="glass-card p-3 rounded-2xl space-y-2 border ${isShort ? 'border-apple-red/40' : 'border-apple-purple/40'} shadow-lg shrink-0">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-xs sm:text-sm flex items-center gap-1.5">
-              <span class="text-apple-purple">🎯</span> <span>${currentCode} 動態定價指引</span>
+              <span>${isShort ? '🔻' : '🎯'}</span> <span>${currentCode} ${currentStructure.regimeDesc}</span>
             </span>
-            <span class="text-[10px] bg-apple-purple/20 text-apple-purple px-2 py-0.5 rounded-full font-bold border border-apple-purple/40">
-              ${currentStructure.strategyType.split('·')[0].split(' ')[0]}
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-bold border ${isShort ? 'bg-apple-red/20 text-apple-red border-apple-red/40' : 'bg-apple-purple/20 text-apple-purple border-apple-purple/40'}">
+              ${currentStructure.strategyType.split('·')[0]}
             </span>
           </div>
 
           <div class="grid grid-cols-2 gap-2">
-            <div class="bg-black/40 p-2 rounded-xl border border-apple-purple/30">
-              <span class="text-apple-purple text-[10px] block font-bold">👉 動態買點 (紫線)</span>
+            <div class="bg-black/40 p-2 rounded-xl border border-white/10">
+              <span class="${isShort ? 'text-apple-red' : 'text-apple-purple'} text-[10px] block font-bold">👉 ${isShort ? '建議空點 (紫線)' : '建議買點 (紫線)'}</span>
               <span class="text-white font-black text-base sm:text-lg font-mono block">$${formatPrice(entry)}</span>
             </div>
             <div class="bg-black/40 p-2 rounded-xl border border-apple-red/30">
@@ -1011,22 +1016,26 @@
             </div>
           </div>
 
-          <button onclick="addBatchFromHunter()" class="w-full py-1.5 text-xs bg-apple-blue hover:opacity-90 active:scale-95 text-white rounded-xl font-black transition shadow flex items-center justify-center gap-1.5">
-            <span>💼</span> <span>將此動態買點加入持倉簿記</span>
+          <div class="bg-black/30 p-2 rounded-xl border border-white/5 text-xs text-apple-gray leading-relaxed">
+            <span class="${isShort ? 'text-apple-red' : 'text-apple-purple'} font-bold block mb-0.5">💡 自適應幾何演算依據：</span>
+            ${currentStructure.rationale}
+          </div>
+
+          <button onclick="addBatchFromHunter()" class="w-full py-1.5 text-xs ${isShort ? 'bg-rose-600 hover:bg-rose-500' : 'bg-apple-blue hover:opacity-90'} active:scale-95 text-white rounded-xl font-black transition shadow flex items-center justify-center gap-1.5">
+            <span>💼</span> <span>記錄至持倉簿記 (${isShort ? '建立空單' : '建立多單'})</span>
           </button>
         </div>
 
-        <!-- 50檔雷達列表：彈性延展，在手機上隨頁面自然捲動，在 iPad 上填滿剩餘高度 -->
+        <!-- 50檔雷達列表 -->
         <div class="flex-1 flex flex-col min-h-0 space-y-1.5">
           <div class="flex justify-between items-center border-b border-white/10 pb-1 shrink-0">
             <span class="font-black text-white text-xs flex items-center gap-1">
-              ⚡ ${isCrypto ? '主流幣高盈虧比雷達' : '50檔精選雷達 (排除牛皮與天花板受阻股)'}
+              ⚡ ${isCrypto ? '主流幣雙向翻箱雷達' : '50檔精選雙向雷達'}
             </span>
             <button id="btn-run-scan" onclick="runFullAutoScanner()" class="text-[11px] font-bold text-apple-blue hover:underline py-0.5 px-2 rounded-lg bg-black/40 border border-white/10 transition">
               🔄 重新掃描
             </button>
           </div>
-          <!-- 空間完全釋放！ -->
           <div class="flex-1 overflow-y-auto space-y-1.5 pr-0.5 no-scrollbar max-h-[500px] md:max-h-none">
             ${scannerListHtml}
           </div>
@@ -1039,17 +1048,17 @@
           <span class="text-apple-green font-black">真實盈虧比 1 : ${currentStructure.rrRatio}</span>
         </div>
         <div class="flex justify-between text-apple-gray text-xs">
-          <span>T1 首波滿足價：</span>
-          <span class="text-apple-green font-bold text-xs sm:text-sm">$${formatPrice(t1)} (+${(((t1 - entry) / entry) * 100).toFixed(1)}%)</span>
+          <span>T1 對稱翻箱價：</span>
+          <span class="text-apple-green font-bold text-xs sm:text-sm">$${formatPrice(t1)} (${isShort ? '-' : '+'}${Math.abs(((t1 - entry) / entry) * 100).toFixed(1)}%)</span>
         </div>
         <div class="flex justify-between text-apple-gray text-xs">
-          <span>T2 二次翻倍價：</span>
-          <span class="text-apple-amber font-bold text-xs sm:text-sm">$${formatPrice(t2)} (+${(((t2 - entry) / entry) * 100).toFixed(1)}%)</span>
+          <span>T2 二次對稱擴展：</span>
+          <span class="text-apple-amber font-bold text-xs sm:text-sm">$${formatPrice(t2)} (${isShort ? '-' : '+'}${Math.abs(((t2 - entry) / entry) * 100).toFixed(1)}%)</span>
         </div>
       `;
     }
 
-    // --- PORTFOLIO 持倉簿記模式 ---
+    // --- PORTFOLIO 持倉簿記模式 (多空雙向損益) ---
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1060,24 +1069,17 @@
       const profile = profiles[currentCode] || { name: universe[currentCode] || currentCode, batches: [] };
 
       const curPrice = currentStructure.currentPrice;
-      const stop = currentStructure.localLow;
+      const stop = currentStructure.suggestedStop;
       const t1 = currentStructure.t1;
       const t2 = currentStructure.t2;
 
-      let b2Trigger = currentStructure.localHigh;
-      if (!b2Trigger || b2Trigger <= curPrice || b2Trigger >= t1) {
-        b2Trigger = Math.min(t1 * 0.94, Math.max(curPrice * 1.025, (curPrice + t1) / 2));
-      }
-
       addLine(stop, '#ff453a', '【底座防守】', 0, 2);
-      addLine(b2Trigger, '#bf5af2', '👉【B2加碼點】', 0, 2);
       addLine(t1, '#30d158', '【T1目標】', 2, 2);
-      addLine(t2, '#ffd60a', '【T2翻倍】', 2, 2);
+      addLine(t2, '#ffd60a', '【T2目標】', 2, 2);
 
       legend.innerHTML = `
         <span class="text-apple-blue">● 持倉均價</span>
-        <span class="text-apple-red">● 底座防守</span>
-        <span class="text-apple-purple">● B2加碼</span>
+        <span class="text-apple-red">● 停損防守</span>
         <span class="text-apple-green">● T1目標</span>
         <span class="text-apple-amber">● T2目標</span>
       `;
@@ -1098,15 +1100,23 @@
         <div id="batch-row-${batch.id}" class="glass-card p-2 rounded-xl border border-white/10 flex items-center gap-2 text-xs font-mono">
           <span class="text-apple-gray font-bold shrink-0 w-4">#${idx + 1}</span>
           
+          <div class="w-14">
+            <label class="text-apple-gray block text-[9px]">方向</label>
+            <select onchange="updateBatchRow('${batch.id}', 'side', this.value)" class="bg-black/40 text-white rounded p-1 font-bold text-[10px] outline-none border border-white/10">
+              <option value="LONG" ${batch.side !== 'SHORT' ? 'selected' : ''}>多</option>
+              <option value="SHORT" ${batch.side === 'SHORT' ? 'selected' : ''}>空</option>
+            </select>
+          </div>
+
           <div class="flex-1">
-            <label class="text-apple-gray block text-[9px]">成本價 (${isCrypto ? 'USDT' : 'TWD'})</label>
+            <label class="text-apple-gray block text-[9px]">成本價</label>
             <input type="number" step="any" value="${batch.cost}" 
                    oninput="updateBatchRow('${batch.id}', 'cost', this.value)" 
                    class="w-full bg-black/50 border border-white/15 rounded-lg px-2 py-0.5 text-white font-bold outline-none focus:border-apple-blue" />
           </div>
 
           <div class="flex-1">
-            <label class="text-apple-gray block text-[9px]">${isCrypto ? '持有顆數' : '持有股數'}</label>
+            <label class="text-apple-gray block text-[9px]">持有量</label>
             <input type="number" step="${isCrypto ? 'any' : '100'}" value="${batch.shares}" 
                    oninput="updateBatchRow('${batch.id}', 'shares', this.value)" 
                    class="w-full bg-black/50 border border-white/15 rounded-lg px-2 py-0.5 text-white font-bold outline-none focus:border-apple-blue" />
@@ -1142,7 +1152,7 @@
 
           <div class="grid grid-cols-2 gap-2 font-mono">
             <div class="bg-black/40 p-2 rounded-xl border border-white/10">
-              <span class="text-apple-gray block text-[9px] font-semibold">加權成本</span>
+              <span class="text-apple-gray block text-[9px] font-semibold">加權平均成本</span>
               <span id="stat-avg-cost" class="font-black text-white text-sm sm:text-base">$0.00</span>
             </div>
             <div class="bg-black/40 p-2 rounded-xl border border-white/10">
@@ -1188,7 +1198,8 @@
         id: newId,
         cost: defaultPrice,
         shares: isCrypto ? 0.1 : 1000,
-        tag: '加碼批次'
+        side: currentStructure.direction || 'LONG',
+        tag: '手動建倉'
       });
       saveProfiles();
       renderPortfolioMode();
@@ -1206,7 +1217,8 @@
         id: newId,
         cost: entryPrice,
         shares: isCrypto ? 0.2 : 5000,
-        tag: currentStructure.strategyType ? currentStructure.strategyType.split(' ')[0] : '動態切入'
+        side: currentStructure.direction || 'LONG',
+        tag: currentStructure.strategyType ? currentStructure.strategyType.split(' ')[0] : '動態建倉'
       });
       saveProfiles();
       setDashboardMode('PORTFOLIO');
@@ -1229,12 +1241,9 @@
       if (!profile || !profile.batches) return;
       const target = profile.batches.find(b => b.id === batchId);
       if (!target) return;
-      const numVal = parseFloat(val);
-      if (!isNaN(numVal)) {
-        target[field] = numVal;
-        saveProfiles();
-        recalcPortfolioAggregates();
-      }
+      target[field] = (field === 'side') ? val : (parseFloat(val) || 0);
+      saveProfiles();
+      recalcPortfolioAggregates();
     }
 
     function recalcPortfolioAggregates() {
@@ -1243,20 +1252,21 @@
       const profile = profiles[currentCode];
       const batches = profile.batches || [];
       const curPrice = currentStructure.currentPrice;
-      const t1 = currentStructure.t1;
-      const t2 = currentStructure.t2;
-      const stop = currentStructure.localLow;
 
       let totalShares = 0;
       let totalCostSum = 0;
+      let totalNetPnl = 0;
 
       batches.forEach(b => {
         const c = parseFloat(b.cost) || 0;
         const s = parseFloat(b.shares) || 0;
+        const isShort = (b.side === 'SHORT');
         totalShares += s;
         totalCostSum += (c * s);
 
-        const rowPnl = (curPrice - c) * s;
+        const rowPnl = isShort ? ((c - curPrice) * s) : ((curPrice - c) * s);
+        totalNetPnl += rowPnl;
+
         const pnlLabel = document.getElementById(`batch-pnl-${b.id}`);
         if (pnlLabel) {
           pnlLabel.innerText = `${rowPnl >= 0 ? '+' : ''}${isCrypto ? rowPnl.toFixed(2) + ' U' : Math.round(rowPnl).toLocaleString()}`;
@@ -1265,8 +1275,7 @@
       });
 
       const avgCost = totalShares > 0 ? (totalCostSum / totalShares) : 0;
-      const totalPnl = (curPrice - avgCost) * totalShares;
-      const totalPnlPct = avgCost > 0 ? (((curPrice - avgCost) / avgCost) * 100).toFixed(1) : 0;
+      const totalPnlPct = (totalCostSum > 0) ? ((totalNetPnl / totalCostSum) * 100).toFixed(2) : 0;
 
       const statCost = document.getElementById('stat-avg-cost');
       const statShares = document.getElementById('stat-total-shares');
@@ -1277,12 +1286,12 @@
       if (statShares) statShares.innerText = `${isCrypto ? totalShares : totalShares.toLocaleString() + ' 股'}`;
 
       if (pnlLabel) {
-        pnlLabel.innerText = `${totalPnl >= 0 ? '+' : ''}${isCrypto ? totalPnl.toFixed(2) + ' USDT' : Math.round(totalPnl).toLocaleString() + ' 元'} (${totalPnlPct}%)`;
-        pnlLabel.className = `font-mono font-black text-xs sm:text-sm ${totalPnl >= 0 ? 'text-apple-green' : 'text-apple-red'}`;
+        pnlLabel.innerText = `${totalNetPnl >= 0 ? '+' : ''}${isCrypto ? totalNetPnl.toFixed(2) + ' USDT' : Math.round(totalNetPnl).toLocaleString() + ' 元'} (${totalPnlPct}%)`;
+        pnlLabel.className = `font-mono font-black text-xs sm:text-sm ${totalNetPnl >= 0 ? 'text-apple-green' : 'text-apple-red'}`;
       }
       if (statusPill) {
-        statusPill.innerText = totalPnl >= 0 ? '整體獲利中' : '回檔整理中';
-        statusPill.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${totalPnl >= 0 ? 'bg-emerald-950/80 text-apple-green border border-apple-green/40' : 'bg-rose-950/80 text-apple-red border border-apple-red/40'}`;
+        statusPill.innerText = totalNetPnl >= 0 ? '獲利持倉中' : '帳面回檔中';
+        statusPill.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${totalNetPnl >= 0 ? 'bg-emerald-950/80 text-apple-green border border-apple-green/40' : 'bg-rose-950/80 text-apple-red border border-apple-red/40'}`;
       }
 
       if (avgCost > 0) {
@@ -1292,37 +1301,10 @@
         candleSeries.removePriceLine(avgCostLine);
         avgCostLine = null;
       }
-
-      const t1Shares = isCrypto ? (totalShares * 0.6) : Math.round(totalShares * 0.6);
-      const t2Shares = totalShares - t1Shares;
-      const t1Profit = (t1 - avgCost) * t1Shares;
-      const t2Profit = (t2 - avgCost) * t2Shares;
-      const t1Pct = avgCost > 0 ? (((t1 - avgCost) / avgCost) * 100).toFixed(1) : 0;
-      const t2Pct = avgCost > 0 ? (((t2 - avgCost) / avgCost) * 100).toFixed(1) : 0;
-
-      const risk = Math.max(0, (avgCost - stop) * totalShares);
-      const totalReward = t1Profit + t2Profit;
-      const hud = document.getElementById('hud-bottom-card');
-      if (hud) {
-        hud.innerHTML = `
-          <div class="text-apple-gray font-bold text-xs border-b border-white/10 pb-0.5 flex justify-between">
-            <span>持倉風控 (${batches.length} 筆)</span>
-            <span class="text-apple-red font-black">底座: $${formatPrice(stop)}</span>
-          </div>
-          <div class="flex justify-between text-apple-gray text-xs">
-            <span>破底最大承擔風險：</span>
-            <span class="text-apple-red font-black">-${isCrypto ? risk.toFixed(2) + ' USDT' : Math.round(risk).toLocaleString() + ' 元'}</span>
-          </div>
-          <div class="flex justify-between text-apple-green font-bold pt-0.5 border-t border-white/10 text-xs">
-            <span>全波段最優期望總盈餘：</span>
-            <span class="text-xs sm:text-sm font-black">+${isCrypto ? totalReward.toFixed(2) + ' USDT' : Math.round(totalReward).toLocaleString() + ' 元'}</span>
-          </div>
-        `;
-      }
     }
 
     // =========================================================================
-    // 6. 全自動掃描器 (精準市場分類，絶無資料混淆)
+    // 6. 全自動雙向掃描器 (精準隔離、即時進度反饋)
     // =========================================================================
     async function runFullAutoScanner() {
       if (isScanning) return;
@@ -1371,38 +1353,26 @@
           const klines = item.klines;
           const len = klines.length;
           const curClose = klines[len - 1].close;
-          const lLow = Math.min(...klines.slice(-18).map(k => k.low));
 
-          let trSum40 = 0;
-          const period40 = Math.min(30, len - 1);
-          for (let k = len - period40; k < len; k++) {
-            trSum40 += Math.max(klines[k].high - klines[k].low, Math.abs(klines[k].high - klines[k - 1].close), Math.abs(klines[k].low - klines[k - 1].close));
-          }
-          const baseAtrPct = ((trSum40 / period40) / curClose) * 100;
-
-          const targets = calculateSymmetricTargets(klines, curClose, baseAtrPct, code);
-          const plan = calculateDynamicPricing(klines, targets.baseLow, targets.baseHigh, lLow, targets.rawT1, targets.rawT2, code);
+          // 執行雙向結構分析
+          analyzeBidirectionalStructure(klines, code);
+          const plan = { ...currentStructure };
           const isHolding = profiles[code] && (profiles[code].batches || []).length > 0;
 
-          if (!isHolding) {
-            if (plan.isTrappedUnderCeiling && plan.rr < 2.5) return;
-            if (plan.atrPct < (isCrypto ? 0.7 : 1.2)) return;
-            if (!isCrypto && plan.avgVol5 < 800) return;
-            if (plan.rr < 1.6) return;
-          }
+          if (!isHolding && plan.rr < 1.6) return;
 
           opportunities.push({
             code,
             name: allCodesMap[code] || code,
+            direction: plan.direction,
             currentPrice: curClose,
-            entry: plan.entry,
-            stop: plan.stop,
+            entry: plan.suggestedEntry,
+            stop: plan.suggestedStop,
             t1: plan.t1,
             t2: plan.t2,
-            rr: plan.rr,
-            tag: plan.type,
-            priority: plan.priority,
-            score: plan.priority * 10 + plan.rr,
+            rr: plan.rrRatio,
+            tag: plan.strategyType,
+            score: (plan.direction === 'LONG' ? 10 : 8) + plan.rrRatio,
             isHolding
           });
         });
@@ -1410,13 +1380,8 @@
         await new Promise(r => setTimeout(r, DELAY_MS));
       }
 
-      opportunities.sort((a, b) => {
-        if (a.isHolding && !b.isHolding) return -1;
-        if (!a.isHolding && b.isHolding) return 1;
-        return b.score - a.score;
-      });
+      opportunities.sort((a, b) => b.score - a.score);
 
-      // 嚴格隔離保存
       if (isCrypto) cryptoScannedOpportunities = opportunities;
       else twScannedOpportunities = opportunities;
 
@@ -1432,11 +1397,12 @@
         }, 2500);
       }
 
-      if (currentDashboardMode === 'HUNTER') renderHunterMode();
+      // 重新載入當前標的狀態
+      loadAsset(currentCode);
     }
 
     // =========================================================================
-    // 7. 深度篩選 (清楚時間戳記 + 運算進度，絕不卡死懸掛)
+    // 7. 深度篩選終端 (明確狀態反饋與時間戳記)
     // =========================================================================
     async function fetchScreenerData() {
       const btn = document.getElementById('btn-fetch-value');
@@ -1446,7 +1412,6 @@
       const title = document.getElementById('screener-header-title');
       const desc = document.getElementById('screener-header-desc');
       const statusBar = document.getElementById('screener-status-bar');
-      const timestampEl = document.getElementById('screener-timestamp');
 
       btn.disabled = true;
       btn.innerHTML = `<span class="inline-block animate-spin">⏳</span> <span>正在運算...</span>`;
@@ -1520,7 +1485,6 @@
           tbody.innerHTML = `<tr><td colspan="7" class="py-14 text-center text-apple-red text-xs font-bold">連線異常，請稍候重試</td></tr>`;
         }
       } else {
-        // Crypto 深度波動度 & 偏離篩選
         title.innerHTML = `<span>🔥</span> <span>主流幣波段波動與乖離篩選器</span>`;
         desc.innerHTML = `依據 1H 週期真實 ATR 波動比率與 20MA 偏離度，快速定位高彈性翻箱機會`;
         thead.innerHTML = `
@@ -1583,7 +1547,6 @@
         }
       }
 
-      // 明確保留「✅ 已更新 (時間戳記)」，絕不擅自倒回「獲取最新數據」！
       btn.disabled = false;
       btn.innerHTML = `<span>✅ 已更新 (${timeStr})</span>`;
       btn.className = 'bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black px-3.5 py-2 rounded-xl transition shadow flex items-center gap-1.5';
@@ -1621,7 +1584,7 @@
     }
 
     // =========================================================================
-    // 8. 導航與互動控制器
+    // 8. 導航與市場切換
     // =========================================================================
     function switchMarket(market) {
       currentMarket = market;
@@ -1701,7 +1664,7 @@
         chartControls.classList.remove('hidden');
         renderModeUI();
       } else if (mode === 'VALUE') {
-        btnVal.className = 'px-2.5 sm:px-3 py-1 rounded-lg bg-white/15 text-white transition font-bold shadow-sm whitespace-nowrap';
+        btnVal.className = 'px-2.5 sm:px-3 py-1 rounded-lg bg-white/10 text-white transition font-bold shadow-sm whitespace-nowrap';
         chartView.classList.add('hidden');
         valView.classList.remove('hidden');
         valView.classList.add('flex');
