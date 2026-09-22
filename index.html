@@ -67,7 +67,7 @@
 </head>
 <body class="min-h-screen md:h-screen w-screen overflow-y-auto md:overflow-hidden p-2 sm:p-3 flex flex-col gap-2.5">
 
-  <!-- 頂部 Apple 風格操控列 -->
+  <!-- 頂部操控列 -->
   <header class="glass-panel w-full rounded-2xl p-2.5 sm:px-4 sm:py-2.5 flex flex-col gap-2 shrink-0 shadow-2xl z-20">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2">
@@ -325,7 +325,7 @@
     };
 
     let cryptoProfiles = JSON.parse(localStorage.getItem(STORAGE_CRYPTO_KEY)) || {
-      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 63800.0, shares: 0.35, side: 'LONG', tag: '突破多單' }] }
+      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 85845.0, shares: 0.188, side: 'LONG', tag: '首發突破倉' }] }
     };
 
     let UNIVERSE_TW = { ...TW_STOCK_DICTIONARY };
@@ -335,6 +335,8 @@
     let chart, candleSeries;
     let activePriceLines = [];
     let avgCostLine = null;
+    let portStopLine = null;
+    let portB2Line = null;
     let isChartHidden = false;
 
     let cryptoScannedOpportunities = [];
@@ -467,7 +469,7 @@
     }
 
     // =========================================================================
-    // 3. 雙向亞當理論演算引擎 (Hunter 模式專用客觀定性)
+    // 3. 雙向亞當理論演算引擎
     // =========================================================================
     function analyzeBidirectionalStructure(klines, code = '') {
       if (!klines || klines.length < 25) return;
@@ -625,7 +627,7 @@
     }
 
     // =========================================================================
-    // 4. 持倉簿記專屬：持倉感知型動態移動停損與利潤加碼計算引擎 (Bug Fix 核心)
+    // 4. 持倉簿記專屬風控計算 (動態移動防守與 B2 獲利加碼)
     // =========================================================================
     function calculatePortfolioLevels(profile, curPrice, klines) {
       const isCrypto = (currentMarket === 'CRYPTO');
@@ -659,7 +661,6 @@
 
       const avgCost = totalShares > 0 ? (totalCostSum / totalShares) : curPrice;
 
-      // 計算 14 週期真實波動度 ATR
       let trSum = 0;
       const atrLen = Math.min(14, len - 1);
       for (let i = len - atrLen; i < len; i++) {
@@ -667,7 +668,6 @@
       }
       const atr14 = Math.max(curPrice * 0.003, trSum / atrLen);
 
-      // 近期 8 根 K 棒的微型擺盪高低點 (用於反應靈敏的 Trailing 移動停損)
       const recent8 = klines.slice(-8);
       const recentLow8 = Math.min(...recent8.map(k => k.low));
       const recentHigh8 = Math.max(...recent8.map(k => k.high));
@@ -679,38 +679,30 @@
       let isBreakevenLocked = false;
 
       if (!isShort) {
-        // ===================== 多單持倉 (LONG) =====================
         const isProfit = (curPrice > avgCost);
 
         if (isProfit) {
-          // 移動停損：如果已經脫離成本，停損絕不能死留在幾千點前的大底！
-          // 鎖利線：至少守在保本價 (avgCost)，若近期回踩底座更高則守在近期底座下方 0.4 ATR
           const lockProfitStop = Math.max(avgCost * 0.998, recentLow8 - 0.4 * atr14);
           portStop = parseFloat(Math.min(curPrice - 0.7 * atr14, lockProfitStop).toFixed(isCrypto ? 2 : 2));
           if (portStop >= avgCost * 0.995) isBreakevenLocked = true;
         } else {
-          // 浮虧或成本附近：停損守在進場底座，但最大虧損嚴格被 1.5 ATR / 2.5% 風控線拉回，絕不允許被套深
           const maxAllowedRisk = avgCost - Math.max(avgCost * (isCrypto ? 0.02 : 0.035), 1.3 * atr14);
           const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentLow8 - 0.8 * atr14);
           portStop = parseFloat(Math.max(maxAllowedRisk, structuralStop).toFixed(isCrypto ? 2 : 2));
         }
 
-        // 確保多單停損必定在現價下方
         if (portStop >= curPrice) {
           portStop = parseFloat((curPrice - 0.8 * atr14).toFixed(isCrypto ? 2 : 2));
         }
 
-        // 動態 B2 加碼點 (賺錢加碼鐵律：必須在 curPrice 與 T1 之間，絕不向下攤平)
         if (isProfit && t1 > curPrice) {
           const distToT1 = t1 - curPrice;
           if (distToT1 > 1.2 * atr14) {
-            // 位於現價前往 T1 的 40% 突破關卡
             portB2 = parseFloat((curPrice + distToT1 * 0.4).toFixed(isCrypto ? 2 : 2));
             b2Label = '👉【B2獲利加碼點】';
           }
         }
       } else {
-        // ===================== 空單持倉 (SHORT) =====================
         const isProfit = (curPrice < avgCost);
 
         if (isProfit) {
@@ -846,6 +838,8 @@
       activePriceLines.forEach(l => candleSeries.removePriceLine(l));
       activePriceLines = [];
       avgCostLine = null;
+      portStopLine = null;
+      portB2Line = null;
     }
 
     function addLine(price, color, title, lineStyle = 2, lineWidth = 2) {
@@ -1152,7 +1146,7 @@
       `;
     }
 
-    // --- PORTFOLIO 持倉簿記模式 (徹底修復 Bug：持倉感知型 Trailing 停損與 B2 加碼) ---
+    // --- PORTFOLIO 持倉簿記模式 (全防跳脫、小數點流暢輸入修復版) ---
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1166,15 +1160,12 @@
       const t1 = currentStructure.t1;
       const t2 = currentStructure.t2;
 
-      // 核心升級：執行專屬持倉感知計算，徹底杜絕停損滯後與加碼點顛倒
       const portCalc = calculatePortfolioLevels(profile, curPrice, rawKlines);
 
-      // 繪製動態移動防守線 (Trailing Stop)
-      addLine(portCalc.portStop, '#ff453a', portCalc.isBreakevenLocked ? '🛡️【保本/鎖利停損】' : '🛑【持倉移動防守】', 0, 2);
+      portStopLine = addLine(portCalc.portStop, '#ff453a', portCalc.isBreakevenLocked ? '🛡️【保本/鎖利停損】' : '🛑【持倉移動防守】', 0, 2);
       
-      // 只有在獲利且上方有空間時才繪製 B2 加碼線，絕不在浮虧時畫線引導向下攤平！
       if (portCalc.portB2) {
-        addLine(portCalc.portB2, '#bf5af2', portCalc.b2Label, 0, 2);
+        portB2Line = addLine(portCalc.portB2, '#bf5af2', portCalc.b2Label, 0, 2);
       }
       
       addLine(t1, '#30d158', '【T1目標】', 2, 2);
@@ -1200,6 +1191,7 @@
       }).join('');
 
       const batches = profile.batches || [];
+      // 重要修正：加上 step="any" 與 inputmode="decimal"，並移除 oninput 重建 DOM 的行為！
       const batchListHtml = batches.map((batch, idx) => `
         <div id="batch-row-${batch.id}" class="glass-card p-2 rounded-xl border border-white/10 flex items-center gap-2 text-xs font-mono">
           <span class="text-apple-gray font-bold shrink-0 w-4">#${idx + 1}</span>
@@ -1214,14 +1206,14 @@
 
           <div class="flex-1">
             <label class="text-apple-gray block text-[9px]">成本價</label>
-            <input type="number" step="any" value="${batch.cost}" 
+            <input type="number" step="any" inputmode="decimal" value="${batch.cost}" 
                    oninput="updateBatchRow('${batch.id}', 'cost', this.value)" 
                    class="w-full bg-black/50 border border-white/15 rounded-lg px-2 py-0.5 text-white font-bold outline-none focus:border-apple-blue" />
           </div>
 
           <div class="flex-1">
-            <label class="text-apple-gray block text-[9px]">持有量</label>
-            <input type="number" step="${isCrypto ? 'any' : '100'}" value="${batch.shares}" 
+            <label class="text-apple-gray block text-[9px]">${isCrypto ? '持有顆數' : '持有股數'}</label>
+            <input type="number" step="any" inputmode="decimal" value="${batch.shares}" 
                    oninput="updateBatchRow('${batch.id}', 'shares', this.value)" 
                    class="w-full bg-black/50 border border-white/15 rounded-lg px-2 py-0.5 text-white font-bold outline-none focus:border-apple-blue" />
           </div>
@@ -1338,6 +1330,7 @@
       renderPortfolioMode();
     }
 
+    // 核心修復：輸入數值時只進行數據與線條運算，絕不重繪 DOM 輸入框！
     function updateBatchRow(batchId, field, val) {
       const isCrypto = (currentMarket === 'CRYPTO');
       const profiles = isCrypto ? cryptoProfiles : twProfiles;
@@ -1345,9 +1338,17 @@
       if (!profile || !profile.batches) return;
       const target = profile.batches.find(b => b.id === batchId);
       if (!target) return;
-      target[field] = (field === 'side') ? val : (parseFloat(val) || 0);
+
+      if (field === 'side') {
+        target[field] = val;
+      } else {
+        const parsed = parseFloat(val);
+        target[field] = isNaN(parsed) ? 0 : parsed;
+      }
+
       saveProfiles();
-      renderPortfolioMode();
+      // 不呼叫 renderPortfolioMode()，避免鍵盤跳開與覆蓋小數點！
+      recalcPortfolioAggregates();
     }
 
     function recalcPortfolioAggregates(portCalc) {
@@ -1402,6 +1403,7 @@
         statusPill.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${totalNetPnl >= 0 ? 'bg-emerald-950/80 text-apple-green border border-apple-green/40' : 'bg-rose-950/80 text-apple-red border border-apple-red/40'}`;
       }
 
+      // 動態更新圖表上的加權成本線與移動停損線
       if (avgCost > 0) {
         if (!avgCostLine) avgCostLine = addLine(avgCost, '#0a84ff', '【加權均價】', 1, 2);
         else avgCostLine.applyOptions({ price: avgCost });
@@ -1410,7 +1412,25 @@
         avgCostLine = null;
       }
 
-      // HUD 風控更新：根據修正後的 portStop 計算真實曝險
+      if (portStopLine && portCalc.portStop > 0) {
+        portStopLine.applyOptions({
+          price: portCalc.portStop,
+          title: portCalc.isBreakevenLocked ? '🛡️【保本/鎖利停損】' : '🛑【持倉移動防守】'
+        });
+      }
+
+      if (portCalc.portB2) {
+        if (!portB2Line) {
+          portB2Line = addLine(portCalc.portB2, '#bf5af2', portCalc.b2Label, 0, 2);
+        } else {
+          portB2Line.applyOptions({ price: portCalc.portB2, title: portCalc.b2Label });
+        }
+      } else if (portB2Line) {
+        candleSeries.removePriceLine(portB2Line);
+        portB2Line = null;
+      }
+
+      // HUD 風控更新
       const hud = document.getElementById('hud-bottom-card');
       if (hud) {
         let actualRisk = 0;
