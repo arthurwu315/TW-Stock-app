@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>量化波段與雙向亞當對稱翻箱終端 (Crypto & Stocks Pro)</title>
+  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -67,7 +67,7 @@
 </head>
 <body class="min-h-screen md:h-screen w-screen overflow-y-auto md:overflow-hidden p-2 sm:p-3 flex flex-col gap-2.5">
 
-  <!-- 頂部 Apple 風格操控列 (二層式佈局，標籤絕不切字換行) -->
+  <!-- 頂部 Apple 風格操控列 -->
   <header class="glass-panel w-full rounded-2xl p-2.5 sm:px-4 sm:py-2.5 flex flex-col gap-2 shrink-0 shadow-2xl z-20">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2">
@@ -76,7 +76,6 @@
         </div>
         <span class="text-xs font-black tracking-wider text-white hidden sm:inline whitespace-nowrap">ADAM QUANT</span>
         
-        <!-- 市場切換 -->
         <div class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-bold shrink-0">
           <button id="btn-market-crypto" onclick="switchMarket('CRYPTO')" class="px-3 py-1 rounded-lg bg-apple-blue text-white transition flex items-center gap-1.5 shadow-sm whitespace-nowrap">
             <span>🪙</span> <span>加密貨幣</span>
@@ -87,7 +86,6 @@
         </div>
       </div>
 
-      <!-- 三大核心功能模式 -->
       <div class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-bold shrink-0">
         <button onclick="setDashboardMode('HUNTER')" id="tab-HUNTER" class="px-2.5 sm:px-3 py-1 rounded-lg bg-white/15 text-white transition flex items-center gap-1 whitespace-nowrap">
           <span>🎯</span> <span id="label-tab-hunter">雙向雷達</span>
@@ -101,7 +99,6 @@
       </div>
     </div>
 
-    <!-- 第二排：標的、時框與動態多空定性標記 -->
     <div id="chart-controls-cluster" class="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pt-1 border-t border-white/5">
       <div class="flex items-center gap-2 shrink-0">
         <select id="asset-select" onchange="switchAsset(this.value)" class="bg-black/60 border border-white/15 text-white font-mono text-xs rounded-xl px-2.5 py-1 font-bold focus:outline-none focus:border-apple-blue shadow-inner cursor-pointer">
@@ -110,7 +107,6 @@
         <div id="timeframe-container" class="flex bg-black/50 p-0.5 rounded-xl border border-white/10 text-xs font-mono font-bold shrink-0">
         </div>
 
-        <!-- 全自動多空定性徽章 (動態計算，無需人手切換) -->
         <div id="regime-badge" class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 bg-white/5 border border-white/10 text-apple-gray">
           <span>🔍</span> <span>結構辨識中</span>
         </div>
@@ -133,8 +129,6 @@
     
     <!-- 左側 K 線圖表 -->
     <section class="md:col-span-7 lg:col-span-8 glass-panel rounded-3xl p-3 sm:p-4 flex flex-col justify-between shadow-xl h-[360px] sm:h-[400px] md:h-full shrink-0 min-h-0 relative">
-      
-      <!-- 圖表指標與視角切換 -->
       <div class="flex flex-wrap justify-between items-center text-xs pb-2 border-b border-white/10 gap-2 shrink-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span id="chart-info" class="font-black text-white text-xs sm:text-sm tracking-wide font-mono">連線中...</span>
@@ -165,20 +159,18 @@
         <div id="dynamic-legend" class="flex flex-wrap gap-2 text-[11px] font-bold font-mono"></div>
       </div>
 
-      <!-- K 線畫布容器 -->
       <div class="relative w-full flex-1 min-h-0 mt-2 rounded-2xl overflow-hidden bg-black/30">
         <div id="chart-box" class="w-full h-full transition-opacity duration-150"></div>
         <div id="floating-targets" class="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10 pointer-events-auto"></div>
       </div>
       
-      <!-- 圖表隱藏佔位符 -->
       <div id="chart-hidden-placeholder" class="hidden w-full flex-1 flex flex-col items-center justify-center text-apple-gray gap-2 border border-dashed border-white/10 py-12 rounded-2xl">
         <span class="text-4xl">👁️‍🗨️</span>
         <span class="text-xs sm:text-sm font-bold text-white">線圖已隱藏 · 專注幾何結構與持倉風控</span>
       </div>
     </section>
 
-    <!-- 右側 雙向操作面板 (iPad/電腦高度完全延展，清單不截斷) -->
+    <!-- 右側 雙向操作面板 -->
     <section class="md:col-span-5 lg:col-span-4 glass-panel rounded-3xl p-3 sm:p-4 flex flex-col justify-between gap-2.5 shadow-2xl min-h-[420px] md:min-h-0 md:h-full md:overflow-hidden">
       <div id="panel-content-container" class="flex-1 flex flex-col min-h-0 gap-2.5"></div>
       <div id="hud-bottom-card" class="glass-card p-3 rounded-2xl border border-white/10 text-xs space-y-1.5 shrink-0 font-mono shadow-inner"></div>
@@ -325,8 +317,8 @@
     let currentDashboardMode = 'HUNTER';
     let currentViewMode = 'FOCUS';
 
-    const STORAGE_TW_KEY = 'macro_trader_universe50_v15_bidirectional';
-    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v15_bidirectional';
+    const STORAGE_TW_KEY = 'macro_trader_universe50_v16_trailing_fix';
+    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v16_trailing_fix';
 
     let twProfiles = JSON.parse(localStorage.getItem(STORAGE_TW_KEY)) || {
       '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, side: 'LONG', tag: '核心多單' }] }
@@ -350,11 +342,10 @@
     let isScanning = false;
     let currentQualifiedScreenerItems = [];
 
-    // 核心雙向結構儲存槽
     let currentStructure = {
       currentPrice: 0,
-      direction: 'LONG', // 'LONG' 或 'SHORT'
-      macroRegime: 'BULL', // 'BULL', 'BEAR', 'NEUTRAL'
+      direction: 'LONG',
+      macroRegime: 'BULL',
       regimeDesc: '',
       macroLow: 0,
       macroHigh: 0,
@@ -371,7 +362,7 @@
     };
 
     // =========================================================================
-    // 2. 雙軌即時 API 行情獲取
+    // 2. 行情線路獲取 (雙軌 API)
     // =========================================================================
     function autoAdjustCorporateActions(klines) {
       if (!klines || klines.length < 2) return klines;
@@ -398,7 +389,7 @@
     }
 
     async function fetchTWKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_tw_v15_${code}`;
+      const cacheKey = `kline_cache_tw_v16_${code}`;
       if (!forceRefresh) {
         try {
           const cache = localStorage.getItem(cacheKey);
@@ -476,7 +467,7 @@
     }
 
     // =========================================================================
-    // 3. 全自動多空趨勢定性與雙向翻箱引擎 (關鍵突破升級！)
+    // 3. 雙向亞當理論演算引擎 (Hunter 模式專用客觀定性)
     // =========================================================================
     function analyzeBidirectionalStructure(klines, code = '') {
       if (!klines || klines.length < 25) return;
@@ -485,23 +476,18 @@
       const len = klines.length;
       const curPrice = klines[len - 1].close;
 
-      // 1. 計算均線矩陣
       const ma10 = klines.slice(-10).reduce((s, k) => s + k.close, 0) / 10;
       const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
       const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma20;
 
-      // 2. 波動度與乖離率
       let trSum14 = 0;
       const atrPeriod = Math.min(14, len - 1);
       for (let i = len - atrPeriod; i < len; i++) {
         trSum14 += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close));
       }
       const atr14 = Math.max(curPrice * 0.003, trSum14 / atrPeriod);
-      const atrPct = (atr14 / curPrice) * 100;
       const bias20 = ((curPrice - ma20) / ma20) * 100;
-      const bias60 = ((curPrice - ma60) / ma60) * 100;
 
-      // 3. 長線宏觀定性 (Macro Regime Detection)
       let macroRegime = 'NEUTRAL';
       let regimeDesc = '';
       if (curPrice >= ma60 && ma20 >= ma60 * 0.99) {
@@ -515,7 +501,6 @@
         regimeDesc = '🟡 均線糾結·多空爭奪區';
       }
 
-      // 4. 短線幾何微型箱體識別 (Micro Box)
       const lookback = (isCrypto && (currentTimeframe === '1h' || currentTimeframe === '15m'))
         ? Math.min(28, len)
         : (isCrypto ? Math.min(45, len) : Math.min(80, len));
@@ -534,24 +519,16 @@
       const minBoxRatio = isCrypto ? 0.018 : 0.035;
       boxH = Math.max(curPrice * minBoxRatio, Math.min(boxH, curPrice * maxCapRatio));
 
-      // 5. 動態多空方向決策 (Direction Decision)
       let direction = 'LONG';
-      let entry = 0;
-      let stop = 0;
-      let t1 = 0;
-      let t2 = 0;
-      let type = '';
-      let rationale = '';
+      let entry = 0, stop = 0, t1 = 0, t2 = 0;
+      let type = '', rationale = '';
       let priority = 1;
 
-      // 判斷是否為「真跌破空頭翻箱」
       const isBreakingDown = (curPrice <= effectiveLow * 1.008);
       const isBreakingUp = (curPrice >= effectiveHigh * 0.992);
 
       if (macroRegime === 'BEAR') {
-        // 【空頭市場規則】：禁止順勢追多，只允許破位放空或超跌極限短打
         if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98) {
-          // 長空短超跌
           direction = 'LONG';
           type = '⚡ 負乖離過大·超跌搶反彈';
           entry = curPrice;
@@ -561,17 +538,15 @@
           rationale = `長線處於 60MA 之下，但 20MA 負乖離達 ${bias20.toFixed(1)}%！出現短線超賣；僅允許以 1.0×ATR 小額博弈反彈至 20MA，嚴禁波段長抱！`;
           priority = 2;
         } else if (isBreakingDown) {
-          // 標準空頭翻箱 (向下等幅對稱測幅)
           direction = 'SHORT';
           type = isCrypto ? '📉 破位下殺·亞當反向翻箱' : '📉 破位下殺·融券放空/避險';
           entry = effectiveLow;
-          stop = effectiveLow + 1.2 * atr14; // 收回箱體上方即停損
-          t1 = effectiveLow - boxH;          // 向下翻出 1 倍箱高
-          t2 = t1 - boxH;                    // 向下翻出 2 倍箱高
-          rationale = `生命線空頭排列，且 1H 實體正式收破箱底座 $${formatPrice(effectiveLow)}！支撐轉為強壓力，啟動亞當反向下翻測幅，T1 下看 $${formatPrice(t1)}`;
+          stop = effectiveLow + 1.2 * atr14;
+          t1 = effectiveLow - boxH;
+          t2 = t1 - boxH;
+          rationale = `生命線空頭排列，且實體收破箱底座 $${formatPrice(effectiveLow)}！支撐轉為強壓力，啟動亞當反向下翻測幅，T1 下看 $${formatPrice(t1)}`;
           priority = 5;
         } else {
-          // 破位後反抽壓力位受阻空
           direction = 'SHORT';
           type = '⚠️ 弱勢反抽·阻力承壓空';
           entry = Math.min(curPrice, effectiveHigh);
@@ -582,7 +557,6 @@
           priority = 4;
         }
       } else {
-        // 【多頭或中性震盪市場規則】：順勢向上翻箱做多
         direction = 'LONG';
         if (bias20 > (isCrypto ? 6.5 : 4.5) && isBreakingUp) {
           type = '⚠️ 短線暴衝·防插針拉回';
@@ -620,7 +594,6 @@
         }
       }
 
-      // 6. 風險與盈虧比計算 (支援雙向)
       let risk, reward;
       if (direction === 'SHORT') {
         risk = Math.max(curPrice * 0.003, stop - entry);
@@ -652,7 +625,131 @@
     }
 
     // =========================================================================
-    // 4. Lightweight-Charts 初始化
+    // 4. 持倉簿記專屬：持倉感知型動態移動停損與利潤加碼計算引擎 (Bug Fix 核心)
+    // =========================================================================
+    function calculatePortfolioLevels(profile, curPrice, klines) {
+      const isCrypto = (currentMarket === 'CRYPTO');
+      const batches = profile.batches || [];
+      const len = klines.length;
+
+      if (batches.length === 0 || len < 15) {
+        return {
+          avgCost: 0,
+          totalShares: 0,
+          isShort: false,
+          portStop: currentStructure.suggestedStop,
+          portB2: null,
+          b2Label: '',
+          isProfit: false,
+          isBreakevenLocked: false
+        };
+      }
+
+      let totalShares = 0;
+      let totalCostSum = 0;
+      let isShort = (batches[0].side === 'SHORT');
+
+      batches.forEach(b => {
+        const c = parseFloat(b.cost) || 0;
+        const s = parseFloat(b.shares) || 0;
+        totalShares += s;
+        totalCostSum += (c * s);
+        if (b.side === 'SHORT') isShort = true;
+      });
+
+      const avgCost = totalShares > 0 ? (totalCostSum / totalShares) : curPrice;
+
+      // 計算 14 週期真實波動度 ATR
+      let trSum = 0;
+      const atrLen = Math.min(14, len - 1);
+      for (let i = len - atrLen; i < len; i++) {
+        trSum += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close));
+      }
+      const atr14 = Math.max(curPrice * 0.003, trSum / atrLen);
+
+      // 近期 8 根 K 棒的微型擺盪高低點 (用於反應靈敏的 Trailing 移動停損)
+      const recent8 = klines.slice(-8);
+      const recentLow8 = Math.min(...recent8.map(k => k.low));
+      const recentHigh8 = Math.max(...recent8.map(k => k.high));
+
+      const t1 = currentStructure.t1;
+      let portStop = 0;
+      let portB2 = null;
+      let b2Label = '';
+      let isBreakevenLocked = false;
+
+      if (!isShort) {
+        // ===================== 多單持倉 (LONG) =====================
+        const isProfit = (curPrice > avgCost);
+
+        if (isProfit) {
+          // 移動停損：如果已經脫離成本，停損絕不能死留在幾千點前的大底！
+          // 鎖利線：至少守在保本價 (avgCost)，若近期回踩底座更高則守在近期底座下方 0.4 ATR
+          const lockProfitStop = Math.max(avgCost * 0.998, recentLow8 - 0.4 * atr14);
+          portStop = parseFloat(Math.min(curPrice - 0.7 * atr14, lockProfitStop).toFixed(isCrypto ? 2 : 2));
+          if (portStop >= avgCost * 0.995) isBreakevenLocked = true;
+        } else {
+          // 浮虧或成本附近：停損守在進場底座，但最大虧損嚴格被 1.5 ATR / 2.5% 風控線拉回，絕不允許被套深
+          const maxAllowedRisk = avgCost - Math.max(avgCost * (isCrypto ? 0.02 : 0.035), 1.3 * atr14);
+          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentLow8 - 0.8 * atr14);
+          portStop = parseFloat(Math.max(maxAllowedRisk, structuralStop).toFixed(isCrypto ? 2 : 2));
+        }
+
+        // 確保多單停損必定在現價下方
+        if (portStop >= curPrice) {
+          portStop = parseFloat((curPrice - 0.8 * atr14).toFixed(isCrypto ? 2 : 2));
+        }
+
+        // 動態 B2 加碼點 (賺錢加碼鐵律：必須在 curPrice 與 T1 之間，絕不向下攤平)
+        if (isProfit && t1 > curPrice) {
+          const distToT1 = t1 - curPrice;
+          if (distToT1 > 1.2 * atr14) {
+            // 位於現價前往 T1 的 40% 突破關卡
+            portB2 = parseFloat((curPrice + distToT1 * 0.4).toFixed(isCrypto ? 2 : 2));
+            b2Label = '👉【B2獲利加碼點】';
+          }
+        }
+      } else {
+        // ===================== 空單持倉 (SHORT) =====================
+        const isProfit = (curPrice < avgCost);
+
+        if (isProfit) {
+          const lockProfitStop = Math.min(avgCost * 1.002, recentHigh8 + 0.4 * atr14);
+          portStop = parseFloat(Math.max(curPrice + 0.7 * atr14, lockProfitStop).toFixed(isCrypto ? 2 : 2));
+          if (portStop <= avgCost * 1.005) isBreakevenLocked = true;
+        } else {
+          const maxAllowedRisk = avgCost + Math.max(avgCost * (isCrypto ? 0.02 : 0.035), 1.3 * atr14);
+          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentHigh8 + 0.8 * atr14);
+          portStop = parseFloat(Math.min(maxAllowedRisk, structuralStop).toFixed(isCrypto ? 2 : 2));
+        }
+
+        if (portStop <= curPrice) {
+          portStop = parseFloat((curPrice + 0.8 * atr14).toFixed(isCrypto ? 2 : 2));
+        }
+
+        if (isProfit && t1 < curPrice) {
+          const distToT1 = curPrice - t1;
+          if (distToT1 > 1.2 * atr14) {
+            portB2 = parseFloat((curPrice - distToT1 * 0.4).toFixed(isCrypto ? 2 : 2));
+            b2Label = '👉【空單獲利加碼點】';
+          }
+        }
+      }
+
+      return {
+        avgCost,
+        totalShares,
+        isShort,
+        portStop,
+        portB2,
+        b2Label,
+        isProfit: isShort ? (curPrice < avgCost) : (curPrice > avgCost),
+        isBreakevenLocked
+      };
+    }
+
+    // =========================================================================
+    // 5. Lightweight-Charts 初始化
     // =========================================================================
     function initChart() {
       const box = document.getElementById('chart-box');
@@ -847,7 +944,7 @@
     }
 
     // =========================================================================
-    // 5. 標的載入與雙模操作台 (雙向亞當完整適配)
+    // 6. 標的載入與操作台渲染
     // =========================================================================
     async function loadAsset(code, forceRefresh = false) {
       currentCode = code;
@@ -871,7 +968,6 @@
         renderModeUI();
         setViewMode('FOCUS');
 
-        // 更新頂部全自動定性標籤
         const badge = document.getElementById('regime-badge');
         if (badge) {
           const isShort = (currentStructure.direction === 'SHORT');
@@ -929,7 +1025,7 @@
       else if (currentDashboardMode === 'PORTFOLIO') renderPortfolioMode();
     }
 
-    // --- HUNTER 雷達模式 (雙向動態線位) ---
+    // --- HUNTER 雷達模式 ---
     function renderHunterMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -994,7 +1090,6 @@
       }
 
       container.innerHTML = `
-        <!-- 動態定價卡片 -->
         <div class="glass-card p-3 rounded-2xl space-y-2 border ${isShort ? 'border-apple-red/40' : 'border-apple-purple/40'} shadow-lg shrink-0">
           <div class="flex justify-between items-center">
             <span class="font-black text-white text-xs sm:text-sm flex items-center gap-1.5">
@@ -1026,7 +1121,6 @@
           </button>
         </div>
 
-        <!-- 50檔雷達列表 -->
         <div class="flex-1 flex flex-col min-h-0 space-y-1.5">
           <div class="flex justify-between items-center border-b border-white/10 pb-1 shrink-0">
             <span class="font-black text-white text-xs flex items-center gap-1">
@@ -1058,7 +1152,7 @@
       `;
     }
 
-    // --- PORTFOLIO 持倉簿記模式 (多空雙向損益) ---
+    // --- PORTFOLIO 持倉簿記模式 (徹底修復 Bug：持倉感知型 Trailing 停損與 B2 加碼) ---
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1069,17 +1163,27 @@
       const profile = profiles[currentCode] || { name: universe[currentCode] || currentCode, batches: [] };
 
       const curPrice = currentStructure.currentPrice;
-      const stop = currentStructure.suggestedStop;
       const t1 = currentStructure.t1;
       const t2 = currentStructure.t2;
 
-      addLine(stop, '#ff453a', '【底座防守】', 0, 2);
+      // 核心升級：執行專屬持倉感知計算，徹底杜絕停損滯後與加碼點顛倒
+      const portCalc = calculatePortfolioLevels(profile, curPrice, rawKlines);
+
+      // 繪製動態移動防守線 (Trailing Stop)
+      addLine(portCalc.portStop, '#ff453a', portCalc.isBreakevenLocked ? '🛡️【保本/鎖利停損】' : '🛑【持倉移動防守】', 0, 2);
+      
+      // 只有在獲利且上方有空間時才繪製 B2 加碼線，絕不在浮虧時畫線引導向下攤平！
+      if (portCalc.portB2) {
+        addLine(portCalc.portB2, '#bf5af2', portCalc.b2Label, 0, 2);
+      }
+      
       addLine(t1, '#30d158', '【T1目標】', 2, 2);
       addLine(t2, '#ffd60a', '【T2目標】', 2, 2);
 
       legend.innerHTML = `
         <span class="text-apple-blue">● 持倉均價</span>
-        <span class="text-apple-red">● 停損防守</span>
+        <span class="text-apple-red">● ${portCalc.isBreakevenLocked ? '保本鎖利' : '移動防守'}</span>
+        ${portCalc.portB2 ? '<span class="text-apple-purple">● B2獲利加碼</span>' : ''}
         <span class="text-apple-green">● T1目標</span>
         <span class="text-apple-amber">● T2目標</span>
       `;
@@ -1183,7 +1287,7 @@
         </div>
       `;
 
-      recalcPortfolioAggregates();
+      recalcPortfolioAggregates(portCalc);
     }
 
     function addNewBatch() {
@@ -1243,15 +1347,19 @@
       if (!target) return;
       target[field] = (field === 'side') ? val : (parseFloat(val) || 0);
       saveProfiles();
-      recalcPortfolioAggregates();
+      renderPortfolioMode();
     }
 
-    function recalcPortfolioAggregates() {
+    function recalcPortfolioAggregates(portCalc) {
       const isCrypto = (currentMarket === 'CRYPTO');
       const profiles = isCrypto ? cryptoProfiles : twProfiles;
       const profile = profiles[currentCode];
       const batches = profile.batches || [];
       const curPrice = currentStructure.currentPrice;
+
+      if (!portCalc) {
+        portCalc = calculatePortfolioLevels(profile, curPrice, rawKlines);
+      }
 
       let totalShares = 0;
       let totalCostSum = 0;
@@ -1301,10 +1409,40 @@
         candleSeries.removePriceLine(avgCostLine);
         avgCostLine = null;
       }
+
+      // HUD 風控更新：根據修正後的 portStop 計算真實曝險
+      const hud = document.getElementById('hud-bottom-card');
+      if (hud) {
+        let actualRisk = 0;
+        if (!portCalc.isShort) {
+          actualRisk = Math.max(0, (avgCost - portCalc.portStop) * totalShares);
+        } else {
+          actualRisk = Math.max(0, (portCalc.portStop - avgCost) * totalShares);
+        }
+
+        hud.innerHTML = `
+          <div class="text-apple-gray font-bold text-xs border-b border-white/10 pb-0.5 flex justify-between">
+            <span>持倉風控監控 (${batches.length} 筆)</span>
+            <span class="${portCalc.isBreakevenLocked ? 'text-apple-green' : 'text-apple-red'} font-black">
+              ${portCalc.isBreakevenLocked ? '🛡️ 保本鎖利防守: $' + formatPrice(portCalc.portStop) : '🛑 移動防守: $' + formatPrice(portCalc.portStop)}
+            </span>
+          </div>
+          <div class="flex justify-between text-apple-gray text-xs">
+            <span>觸發防守最大承擔風險：</span>
+            <span class="${portCalc.isBreakevenLocked ? 'text-apple-green' : 'text-apple-red'} font-black">
+              ${portCalc.isBreakevenLocked ? '+$0.00 (已鎖定保本)' : '-' + (isCrypto ? actualRisk.toFixed(2) + ' USDT' : Math.round(actualRisk).toLocaleString() + ' 元')}
+            </span>
+          </div>
+          <div class="flex justify-between text-apple-purple font-bold pt-0.5 border-t border-white/10 text-xs">
+            <span>B2 加碼狀態指引：</span>
+            <span class="text-xs font-mono">${portCalc.portB2 ? '達到 $' + formatPrice(portCalc.portB2) + ' 啟動加碼' : (portCalc.isProfit ? '已逼近 T1，不再追價加碼' : '⚠️ 浮虧整理中·禁止攤平加碼')}</span>
+          </div>
+        `;
+      }
     }
 
     // =========================================================================
-    // 6. 全自動雙向掃描器 (精準隔離、即時進度反饋)
+    // 7. 全自動雙向掃描器
     // =========================================================================
     async function runFullAutoScanner() {
       if (isScanning) return;
@@ -1354,12 +1492,11 @@
           const len = klines.length;
           const curClose = klines[len - 1].close;
 
-          // 執行雙向結構分析
           analyzeBidirectionalStructure(klines, code);
           const plan = { ...currentStructure };
           const isHolding = profiles[code] && (profiles[code].batches || []).length > 0;
 
-          if (!isHolding && plan.rr < 1.6) return;
+          if (!isHolding && plan.rrRatio < 1.6) return;
 
           opportunities.push({
             code,
@@ -1397,12 +1534,11 @@
         }, 2500);
       }
 
-      // 重新載入當前標的狀態
       loadAsset(currentCode);
     }
 
     // =========================================================================
-    // 7. 深度篩選終端 (明確狀態反饋與時間戳記)
+    // 8. 深度篩選終端
     // =========================================================================
     async function fetchScreenerData() {
       const btn = document.getElementById('btn-fetch-value');
@@ -1584,7 +1720,7 @@
     }
 
     // =========================================================================
-    // 8. 導航與市場切換
+    // 9. 導航與市場切換
     // =========================================================================
     function switchMarket(market) {
       currentMarket = market;
@@ -1798,7 +1934,7 @@
     }
 
     // =========================================================================
-    // 9. 啟動入口
+    // 10. 啟動入口
     // =========================================================================
     window.addEventListener('DOMContentLoaded', () => {
       initChart();
