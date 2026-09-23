@@ -580,24 +580,40 @@
       let actionable = true;
 
       // =========================================================================
-      // 一票否決熔斷層：天量長黑 / 自由落體瀑布 / 頭部破位
+      // 一票否決熔斷層：天量長黑 / 自由落體瀑布 / 頭部破位 (含 T0 防禦與熊旗自適應)
       // =========================================================================
       if (hasPanicDump || isWaterfallDrop || (isTopNecklineBroken && curPrice < ma7)) {
         direction = 'SHORT';
         trafficLight = 'RED';
         actionable = false;
-        type = '⛔ 爆量崩跌熔斷 · 禁開多單';
         
-        // 死貓反抽計算：長黑 50% 費氏位承壓區
-        const deadCatBounce = parseFloat((curPrice + (recent3High - curPrice) * 0.5).toFixed(isCrypto ? 2 : 2));
-        entry = deadCatBounce;
-        stop = parseFloat((recent3High + 0.3 * atr14).toFixed(isCrypto ? 2 : 2));
-        t1 = parseFloat((curPrice - boxH).toFixed(isCrypto ? 2 : 2));
-        t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
-        
-        rationale = `⚠️ 偵測到爆量清算長黑（單根放量達均量 ${maxVolSpike.toFixed(1)} 倍、落體暴跌 ${recent3DropPct.toFixed(1)}%）！均線全面破壞，多頭嚴重受困。系統強制啟動【瀑布熔斷】，絕對禁止左側抄底！若有反抽預估極限回測 50% 頸線 ($${formatPrice(deadCatBounce)})，隨後易進入二次探底或震盪陰跌。`;
+        // 1. 抓取剛才暴跌砸出的針尖最低點 (T0)
+        const needleLow = Math.min(...klines.slice(-4).map(k => k.low));
+        const bounce382 = parseFloat((needleLow + (recent3High - needleLow) * 0.382).toFixed(isCrypto ? 2 : 2));
+        const bounce500 = parseFloat((needleLow + (recent3High - needleLow) * 0.500).toFixed(isCrypto ? 2 : 2));
 
-      } else if (macroRegime === 'BEAR') {
+        // 2. 檢驗是否為「極斜率弱反彈 (連 0.382 都碰不到的橫盤走平)」
+        const isExtremelyWeak = (curPrice < bounce382) && (checkDumpBars >= 2);
+
+        if (isExtremelyWeak) {
+          type = '⛔ 瀑布熔斷 · 弱勢熊旗走平';
+          // 極弱走勢：不空在半空中，改以「破底順勢跟進」或「0.382 弱抽」
+          entry = parseFloat((needleLow * 0.998).toFixed(isCrypto ? 2 : 2));
+          stop = parseFloat((curPrice + 1.2 * atr14).toFixed(isCrypto ? 2 : 2));
+          t1 = parseFloat((needleLow - boxH).toFixed(isCrypto ? 2 : 2));
+          t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
+          
+          rationale = `⚠️ 瀑布暴跌後連 0.382 反抽位 ($${formatPrice(bounce382)}) 都無法觸及，走勢極端弱勢！切忌在 $${formatPrice(curPrice)} 地板追空；若要做空，建議設定條件觸價單：實體破位前低 $${formatPrice(needleLow)} 順勢開空，或等待橫盤 6 根以上構築新底座。`;
+        } else {
+          type = '⛔ 爆量崩跌熔斷 · 逢高死貓空';
+          entry = bounce500;
+          stop = parseFloat((recent3High + 0.3 * atr14).toFixed(isCrypto ? 2 : 2));
+          // 第一目標 T1 改由「前波針尖低點 (T0)」接管，杜絕雙底利潤回吐
+          t1 = needleLow;
+          t2 = parseFloat((needleLow - boxH).toFixed(isCrypto ? 2 : 2));
+          
+          rationale = `⚠️ 單根天量清算長黑（放量 ${maxVolSpike.toFixed(1)} 倍）！禁止左側抄底多單。預約於 50% 費氏強阻力位 ($${formatPrice(bounce500)}) 限價做空；【重要紀律】若順利成交，跌回前低 $${formatPrice(needleLow)} 時必須先出 40% 並推保本，防止多頭打出雙底反殺！`;
+        } else if (macroRegime === 'BEAR') {
         const isBreakingDown = (curPrice <= effectiveLow * 1.008);
         if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98 && !hasPanicDump) {
           direction = 'LONG';
