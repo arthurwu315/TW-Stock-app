@@ -278,9 +278,6 @@
   </div>
 
   <script>
-    // =========================================================================
-    // 1. 資產清單與持久化儲存
-    // =========================================================================
     const TW_STOCK_DICTIONARY = {
       '2330': '台積電', '2454': '聯發科', '2317': '鴻海', '2382': '廣達', '3231': '緯創',
       '6669': '緯穎', '2356': '英業達', '3017': '奇鋐', '3324': '雙鴻', '2376': '技嘉',
@@ -317,8 +314,8 @@
     let currentDashboardMode = 'HUNTER';
     let currentViewMode = 'FOCUS';
 
-    const STORAGE_TW_KEY = 'macro_trader_universe50_v17_circuit_breaker';
-    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v17_circuit_breaker';
+    const STORAGE_TW_KEY = 'macro_trader_universe50_v18_panic_dump_filter';
+    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v18_panic_dump_filter';
 
     let twProfiles = JSON.parse(localStorage.getItem(STORAGE_TW_KEY)) || {
       '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, side: 'LONG', tag: '核心多單' }] }
@@ -361,16 +358,13 @@
       suggestedStop: 0,
       rrRatio: 0,
       slPct: 0,
-      trafficLight: 'GREEN', // 'GREEN', 'RED', 'YELLOW'
+      trafficLight: 'GREEN',
       actionable: true,
       isStagnant: false,
       stagnantBars: 0,
       rationale: ''
     };
 
-    // =========================================================================
-    // 2. 行情線路獲取 (雙軌 API)
-    // =========================================================================
     function autoAdjustCorporateActions(klines) {
       if (!klines || klines.length < 2) return klines;
       const adjusted = klines.map(k => ({ ...k }));
@@ -396,7 +390,7 @@
     }
 
     async function fetchTWKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_tw_v17_${code}`;
+      const cacheKey = `kline_cache_tw_v18_${code}`;
       if (!forceRefresh) {
         try {
           const cache = localStorage.getItem(cacheKey);
@@ -474,7 +468,7 @@
     }
 
     // =========================================================================
-    // 3. 雙向亞當理論演算引擎 (含微型錨定、SL熔斷機制與時間衰退檢測)
+    // 3. 雙向亞當理論演算引擎 (含【三重瀑布熔斷層】、微型錨定與時間衰退檢測)
     // =========================================================================
     function analyzeBidirectionalStructure(klines, code = '') {
       if (!klines || klines.length < 25) return;
@@ -483,6 +477,7 @@
       const len = klines.length;
       const curPrice = klines[len - 1].close;
 
+      const ma7 = klines.slice(-7).reduce((s, k) => s + k.close, 0) / 7;
       const ma10 = klines.slice(-10).reduce((s, k) => s + k.close, 0) / 10;
       const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
       const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma20;
@@ -495,7 +490,41 @@
       const atr14 = Math.max(curPrice * 0.003, trSum14 / atrPeriod);
       const bias20 = ((curPrice - ma20) / ma20) * 100;
 
-      // 【核心升級 1：時間衰退檢測 (Stagnation Detector)】
+      // 【核心升級 A：天量砸盤與自由落體檢測 (Volume Spike & Waterfall Detector)】
+      let volSum20 = 0;
+      const volPeriod = Math.min(20, len - 1);
+      for (let i = len - volPeriod; i < len; i++) {
+        volSum20 += (klines[i].volume || 0);
+      }
+      const avgVol20 = volPeriod > 0 ? (volSum20 / volPeriod) : 1;
+
+      let maxVolSpike = 0;
+      let hasPanicDump = false;
+      const checkDumpBars = Math.min(3, len);
+      for (let i = len - 1; i >= len - checkDumpBars; i--) {
+        const k = klines[i];
+        const isBear = k.close < k.open;
+        const vRatio = avgVol20 > 0 ? ((k.volume || 0) / avgVol20) : 0;
+        if (vRatio > maxVolSpike) maxVolSpike = vRatio;
+        
+        const bodyDrop = (k.open - k.close);
+        // 單根為長黑、放量達均量 2.2 倍以上，且跌幅實體超過 1.0 ATR
+        if (isBear && vRatio >= 2.2 && bodyDrop >= 1.0 * atr14) {
+          hasPanicDump = true;
+        }
+      }
+
+      // 落體加速度 (Waterfall Velocity)
+      const recent3High = Math.max(...klines.slice(-3).map(k => k.high));
+      const recent3DropPct = ((recent3High - curPrice) / recent3High) * 100;
+      const isWaterfallDrop = (recent3DropPct > (isCrypto ? 2.5 : 3.2)) && (recent3High - curPrice > 1.8 * atr14);
+
+      // 高檔頭部破位檢驗 (Top Breakdown)
+      const topPlateauSlice = klines.slice(Math.max(0, len - 35), Math.max(0, len - 3));
+      const topPlateauLow = topPlateauSlice.length >= 8 ? Math.min(...topPlateauSlice.map(k => k.low)) : 0;
+      const isTopNecklineBroken = (topPlateauLow > 0) && (curPrice < topPlateauLow);
+
+      // 【核心升級 B：時間衰退檢測 (Stagnation Detector)】
       const checkBars = Math.min(16, len);
       const slice16 = klines.slice(-checkBars);
       const high16 = Math.max(...slice16.map(k => k.high));
@@ -503,7 +532,7 @@
       const range16Pct = ((high16 - low16) / curPrice) * 100;
       const isStagnant = (range16Pct <= 1.5 && checkBars >= 14);
 
-      // 【核心升級 2：微型底座錨定 (Micro Swing Base)】
+      // 【微型底座錨定 (Micro Swing Base)】
       const microBars = Math.min(10, len);
       const sliceMicro = klines.slice(-microBars);
       const microLow = Math.min(...sliceMicro.map(k => k.low));
@@ -511,7 +540,11 @@
 
       let macroRegime = 'NEUTRAL';
       let regimeDesc = '';
-      if (curPrice >= ma60 && ma20 >= ma60 * 0.99) {
+
+      if (hasPanicDump || isWaterfallDrop) {
+        macroRegime = 'BEAR_PANIC';
+        regimeDesc = '🔴 巨量崩跌破位 · 瀑布釋放中';
+      } else if (curPrice >= ma60 && ma20 >= ma60 * 0.99) {
         macroRegime = 'BULL';
         regimeDesc = '🟢 多頭主升浪 (生命線之上)';
       } else if (curPrice < ma60 && ma20 < ma60) {
@@ -528,8 +561,7 @@
 
       const recentSlice = klines.slice(-lookback);
       const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
-      const minBody = Math.min(...recentSlice.map(k => minBodySafe(k)));
-      function minBodySafe(k) { return Math.min(k.open, k.close); }
+      const minBody = Math.min(...recentSlice.map(k => Math.min(k.open, k.close)));
       const peakHigh = Math.max(...recentSlice.map(k => k.high));
       const troughLow = Math.min(...recentSlice.map(k => k.low));
 
@@ -544,12 +576,30 @@
       let direction = 'LONG';
       let entry = 0, stop = 0, t1 = 0, t2 = 0;
       let type = '', rationale = '';
+      let trafficLight = 'GREEN';
+      let actionable = true;
 
-      const isBreakingDown = (curPrice <= effectiveLow * 1.008);
-      const isBreakingUp = (curPrice >= effectiveHigh * 0.992);
+      // =========================================================================
+      // 一票否決熔斷層：天量長黑 / 自由落體瀑布 / 頭部破位
+      // =========================================================================
+      if (hasPanicDump || isWaterfallDrop || (isTopNecklineBroken && curPrice < ma7)) {
+        direction = 'SHORT';
+        trafficLight = 'RED';
+        actionable = false;
+        type = '⛔ 爆量崩跌熔斷 · 禁開多單';
+        
+        // 死貓反抽計算：長黑 50% 費氏位承壓區
+        const deadCatBounce = parseFloat((curPrice + (recent3High - curPrice) * 0.5).toFixed(isCrypto ? 2 : 2));
+        entry = deadCatBounce;
+        stop = parseFloat((recent3High + 0.3 * atr14).toFixed(isCrypto ? 2 : 2));
+        t1 = parseFloat((curPrice - boxH).toFixed(isCrypto ? 2 : 2));
+        t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
+        
+        rationale = `⚠️ 偵測到爆量清算長黑（單根放量達均量 ${maxVolSpike.toFixed(1)} 倍、落體暴跌 ${recent3DropPct.toFixed(1)}%）！均線全面破壞，多頭嚴重受困。系統強制啟動【瀑布熔斷】，絕對禁止左側抄底！若有反抽預估極限回測 50% 頸線 ($${formatPrice(deadCatBounce)})，隨後易進入二次探底或震盪陰跌。`;
 
-      if (macroRegime === 'BEAR') {
-        if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98) {
+      } else if (macroRegime === 'BEAR') {
+        const isBreakingDown = (curPrice <= effectiveLow * 1.008);
+        if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98 && !hasPanicDump) {
           direction = 'LONG';
           type = '⚡ 負乖離過大·超跌搶反彈';
           entry = curPrice;
@@ -561,7 +611,6 @@
           direction = 'SHORT';
           type = isCrypto ? '📉 破位下殺·亞當反向翻箱' : '📉 破位下殺·融券放空/避險';
           entry = effectiveLow;
-          // 空單防守強制微型錨定在近期高點，而非大時框頂部
           stop = Math.min(microHigh + 0.5 * atr14, entry + 1.2 * atr14);
           t1 = effectiveLow - boxH;
           t2 = t1 - boxH;
@@ -577,6 +626,8 @@
         }
       } else {
         direction = 'LONG';
+        const isBreakingUp = (curPrice >= effectiveHigh * 0.992);
+
         if (bias20 > (isCrypto ? 6.0 : 4.5) && isBreakingUp) {
           type = '⚠️ 短線暴衝·防插針拉回';
           const safePullback = Math.max(ma10, effectiveHigh * 0.985);
@@ -588,7 +639,6 @@
         } else if (isBreakingUp) {
           type = '🚀 頸線突破·亞當向上翻倍';
           entry = effectiveHigh;
-          // 多單防守強制微型錨定在近期低點，絕不掉進 5,000 點歷史大底
           stop = Math.max(microLow - 0.4 * atr14, entry - 1.2 * atr14);
           t1 = effectiveHigh + boxH;
           t2 = t1 + boxH;
@@ -603,7 +653,6 @@
         } else {
           type = '📈 順勢均線·回踩佈局';
           entry = Math.max(ma20, curPrice - 0.4 * atr14);
-          // 強制微型化防守：不能抓死箱體底部，而是抓近期微型底座與 1.2 ATR 的較高者
           stop = Math.max(microLow - 0.4 * atr14, entry - 1.2 * atr14);
           t1 = entry + boxH;
           t2 = t1 + boxH;
@@ -611,31 +660,31 @@
         }
       }
 
-      // 【核心升級 3：停損百分比與風控熔斷檢查】
+      // 風控數值核算
       let risk = (direction === 'SHORT') ? Math.max(curPrice * 0.002, stop - entry) : Math.max(curPrice * 0.002, entry - stop);
       let reward = (direction === 'SHORT') ? Math.max(curPrice * 0.002, entry - t1) : Math.max(curPrice * 0.002, t1 - entry);
       const rr = parseFloat((reward / risk).toFixed(1));
       const slPct = parseFloat(((risk / entry) * 100).toFixed(2));
 
-      const maxAllowedSL = isCrypto ? 1.8 : 2.5; // 加密貨幣上限 1.8%，台股上限 2.5%
-      let trafficLight = 'GREEN';
-      let actionable = true;
+      const maxAllowedSL = isCrypto ? 1.8 : 2.5;
 
-      if (slPct > maxAllowedSL) {
-        trafficLight = 'RED';
-        actionable = false;
-        type = `⛔ 風控熔斷 · 停損過深 (${slPct}%)`;
-        rationale = `⚠️ 下方最近有效支撐距進場點達 ${slPct}%（超過 ${maxAllowedSL}% 警戒線）！起漲點過遠且缺乏緊湊底座，開倉盈虧比極劣，程式強制熔斷禁止開倉！`;
-      } else if (isStagnant) {
-        trafficLight = 'YELLOW';
-        actionable = false;
-        type = `⏰ 動能衰退 · 橫盤沉睡`;
-        rationale = `⚠️ 近 16 根 K 棒處於極窄幅震盪（振幅僅 ${range16Pct.toFixed(1)}%），原突破爆發力已耗盡，容易演變成假突破或急跌洗盤，建議空倉觀望。`;
-      } else if (rr < 1.6) {
-        trafficLight = 'YELLOW';
-        actionable = false;
-        type = `⚠️ 盈虧比不佳 (1:${rr})`;
-        rationale = `當前預期利潤與承擔風險比例僅 1:${rr}，低於最低 1:1.6 門檻，不符合波段勝率優勢，建議等待更佳點位。`;
+      if (trafficLight !== 'RED') {
+        if (slPct > maxAllowedSL) {
+          trafficLight = 'RED';
+          actionable = false;
+          type = `⛔ 風控熔斷 · 停損過深 (${slPct}%)`;
+          rationale = `⚠️ 下方最近有效支撐距進場點達 ${slPct}%（超過 ${maxAllowedSL}% 警戒線）！起漲點過遠且缺乏緊湊底座，開倉盈虧比極劣，程式強制熔斷禁止開倉！`;
+        } else if (isStagnant) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = `⏰ 動能衰退 · 橫盤沉睡`;
+          rationale = `⚠️ 近 16 根 K 棒處於極窄幅震盪（振幅僅 ${range16Pct.toFixed(1)}%），原突破爆發力已耗盡，容易演變成假突破或急跌洗盤，建議空倉觀望。`;
+        } else if (rr < 1.6) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = `⚠️ 盈虧比不佳 (1:${rr})`;
+          rationale = `當前預期利潤與承擔風險比例僅 1:${rr}，低於最低 1:1.6 門檻，不符合波段勝率優勢，建議等待更佳點位。`;
+        }
       }
 
       currentStructure = {
@@ -663,9 +712,6 @@
       };
     }
 
-    // =========================================================================
-    // 4. 持倉簿記專屬風控計算 (動態移動防守與 B2 獲利加碼)
-    // =========================================================================
     function calculatePortfolioLevels(profile, curPrice, klines) {
       const isCrypto = (currentMarket === 'CRYPTO');
       const batches = profile.batches || [];
@@ -710,7 +756,6 @@
       const recentLow8 = Math.min(...recent8.map(k => k.low));
       const recentHigh8 = Math.max(...recent8.map(k => k.high));
 
-      // 檢查持倉是否遭遇長達 14 根以上的橫盤死魚盤
       const sliceHolding = klines.slice(-14);
       const hMax = Math.max(...sliceHolding.map(k => k.high));
       const hMin = Math.min(...sliceHolding.map(k => k.low));
@@ -785,9 +830,6 @@
       };
     }
 
-    // =========================================================================
-    // 5. Lightweight-Charts 初始化
-    // =========================================================================
     function initChart() {
       const box = document.getElementById('chart-box');
       chart = LightweightCharts.createChart(box, {
@@ -982,9 +1024,6 @@
       }
     }
 
-    // =========================================================================
-    // 6. 標的載入與操作台渲染
-    // =========================================================================
     async function loadAsset(code, forceRefresh = false) {
       currentCode = code;
       const isCrypto = (currentMarket === 'CRYPTO');
@@ -1007,7 +1046,7 @@
         renderModeUI();
         setViewMode('FOCUS');
 
-        // 更新頂部全自動紅綠燈定性標籤
+        // 頂部紅綠燈狀態更新
         const badge = document.getElementById('regime-badge');
         if (badge) {
           const tl = currentStructure.trafficLight;
@@ -1016,7 +1055,7 @@
             badge.innerHTML = `<span>🟢</span> <span>可開倉 · 條件合格</span>`;
           } else if (tl === 'RED') {
             badge.className = 'px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 bg-rose-950/80 text-apple-red border border-apple-red/40 shadow-sm';
-            badge.innerHTML = `<span>🔴</span> <span>風控熔斷 · 禁止開倉</span>`;
+            badge.innerHTML = `<span>🔴</span> <span>風控熔斷 · 禁開多單</span>`;
           } else {
             badge.className = 'px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 bg-amber-950/80 text-apple-amber border border-apple-amber/40 shadow-sm';
             badge.innerHTML = `<span>🟡</span> <span>動能收斂 · 觀望等待</span>`;
@@ -1073,7 +1112,6 @@
       else if (currentDashboardMode === 'PORTFOLIO') renderPortfolioMode();
     }
 
-    // --- HUNTER 雷達模式 (包含極簡紅綠燈橫幅與熔斷保護) ---
     function renderHunterMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1087,13 +1125,13 @@
       const isShort = (currentStructure.direction === 'SHORT');
       const tl = currentStructure.trafficLight;
 
-      addLine(entry, '#bf5af2', isShort ? '👉【空單建倉價】' : '👉【多單建議買點】', 0, 2);
+      addLine(entry, '#bf5af2', isShort ? '👉【反抽建議空點】' : '👉【多單建議買點】', 0, 2);
       addLine(stop, '#ff453a', isShort ? '🛑【空單防守停損】' : '🛑【多單結構停損】', 0, 2);
       addLine(t1, '#30d158', isShort ? '🎯【T1下翻止盈】' : '🎯【T1首波滿足】', 2, 2);
       addLine(t2, '#ffd60a', isShort ? '🏆【T2二次下翻】' : '🏆【T2二次翻倍】', 2, 2);
 
       legend.innerHTML = `
-        <span class="text-apple-purple">● ${isShort ? '空單開倉' : '多單買點'}</span>
+        <span class="text-apple-purple">● ${isShort ? '反抽空點' : '多單買點'}</span>
         <span class="text-apple-red">● 停損防守</span>
         <span class="text-apple-green">● T1目標</span>
         <span class="text-apple-amber">● T2目標</span>
@@ -1138,7 +1176,6 @@
         `).join('');
       }
 
-      // 紅綠燈狀態橫幅
       let bannerHtml = '';
       if (tl === 'GREEN') {
         bannerHtml = `
@@ -1155,9 +1192,9 @@
           <div class="p-2.5 rounded-xl bg-rose-950/60 border border-apple-red/40 flex items-center justify-between text-apple-red font-bold text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-apple-red"></span>
-              <span>🔴 風控熔斷 · 禁止開倉</span>
+              <span>🔴 瀑布熔斷 · 禁止開多</span>
             </div>
-            <span class="font-mono text-[11px]">停損 ${currentStructure.slPct}% > 上限</span>
+            <span class="font-mono text-[11px]">暴跌破位中</span>
           </div>
         `;
       } else {
@@ -1175,7 +1212,6 @@
       container.innerHTML = `
         <div class="glass-card p-3 rounded-2xl space-y-2 border ${tl === 'RED' ? 'border-apple-red/40' : (tl === 'GREEN' ? 'border-apple-green/40' : 'border-apple-amber/40')} shadow-lg shrink-0">
           
-          <!-- 極簡紅綠燈狀態橫幅 -->
           ${bannerHtml}
 
           <div class="flex justify-between items-center">
@@ -1189,11 +1225,11 @@
 
           <div class="grid grid-cols-2 gap-2">
             <div class="bg-black/40 p-2 rounded-xl border border-white/10">
-              <span class="${isShort ? 'text-apple-red' : 'text-apple-purple'} text-[10px] block font-bold">👉 ${isShort ? '建議空點 (紫線)' : '建議買點 (紫線)'}</span>
+              <span class="${isShort ? 'text-apple-red' : 'text-apple-purple'} text-[10px] block font-bold">👉 ${isShort ? '反抽建議空點 (紫線)' : '建議買點 (紫線)'}</span>
               <span class="text-white font-black text-base sm:text-lg font-mono block">$${formatPrice(entry)}</span>
             </div>
             <div class="bg-black/40 p-2 rounded-xl border border-apple-red/30">
-              <span class="text-apple-red text-[10px] block font-bold">🛑 結構停損 (${currentStructure.slPct}%)</span>
+              <span class="text-apple-red text-[10px] block font-bold">🛑 結構防守 (${currentStructure.slPct}%)</span>
               <span class="text-apple-red font-black text-base sm:text-lg font-mono block">$${formatPrice(stop)}</span>
             </div>
           </div>
@@ -1239,7 +1275,6 @@
       `;
     }
 
-    // --- PORTFOLIO 持倉簿記模式 (全防跳脫、小數點流暢輸入、含持倉超時警報) ---
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1493,7 +1528,6 @@
         statusPill.className = `text-[10px] font-bold px-2 py-0.5 rounded-full ${totalNetPnl >= 0 ? 'bg-emerald-950/80 text-apple-green border border-apple-green/40' : 'bg-rose-950/80 text-apple-red border border-apple-red/40'}`;
       }
 
-      // 動態更新圖表上的加權成本線與移動停損線
       if (avgCost > 0) {
         if (!avgCostLine) avgCostLine = addLine(avgCost, '#0a84ff', '【加權均價】', 1, 2);
         else avgCostLine.applyOptions({ price: avgCost });
@@ -1520,7 +1554,6 @@
         portB2Line = null;
       }
 
-      // HUD 風控更新：包含時間衰退提示
       const hud = document.getElementById('hud-bottom-card');
       if (hud) {
         let actualRisk = 0;
@@ -1559,9 +1592,6 @@
       }
     }
 
-    // =========================================================================
-    // 7. 全自動雙向掃描器 (自動過濾風控熔斷標的)
-    // =========================================================================
     async function runFullAutoScanner() {
       if (isScanning) return;
       isScanning = true;
@@ -1656,9 +1686,6 @@
       loadAsset(currentCode);
     }
 
-    // =========================================================================
-    // 8. 深度篩選終端
-    // =========================================================================
     async function fetchScreenerData() {
       const btn = document.getElementById('btn-fetch-value');
       const btnImportAll = document.getElementById('btn-import-all-value');
@@ -1838,9 +1865,6 @@
       runFullAutoScanner();
     }
 
-    // =========================================================================
-    // 9. 導航與市場切換
-    // =========================================================================
     function switchMarket(market) {
       currentMarket = market;
       const btnCrypto = document.getElementById('btn-market-crypto');
@@ -2052,9 +2076,6 @@
       switchAsset(currentCode, true);
     }
 
-    // =========================================================================
-    // 10. 啟動入口
-    // =========================================================================
     window.addEventListener('DOMContentLoaded', () => {
       initChart();
       renderTimeframeButtons();
