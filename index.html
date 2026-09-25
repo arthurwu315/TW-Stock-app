@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro v20)</title>
+  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro v21 Calibrated)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -311,23 +311,23 @@
 
     let currentMarket = 'CRYPTO';
     let currentCode = 'BTCUSDT';
-    let currentTimeframe = '15m';
+    let currentTimeframe = '4h'; // 預設支援 4H 波段
     let currentDashboardMode = 'HUNTER';
     let currentViewMode = 'FOCUS';
 
-    // 智能倉位設定值持久化
+    // 智能部位規模設定值 (持久化)
     let userBaseEquity = parseFloat(localStorage.getItem('adam_user_base_equity')) || 10000;
     let userRiskPercent = parseFloat(localStorage.getItem('adam_user_risk_pct')) || 2.0;
 
-    const STORAGE_TW_KEY = 'macro_trader_universe50_v20_t0_ratchet';
-    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v20_t0_ratchet';
+    const STORAGE_TW_KEY = 'macro_trader_universe50_v21_calibrated';
+    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v21_calibrated';
 
     let twProfiles = JSON.parse(localStorage.getItem(STORAGE_TW_KEY)) || {
       '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, side: 'LONG', tag: '核心多單' }] }
     };
 
     let cryptoProfiles = JSON.parse(localStorage.getItem(STORAGE_CRYPTO_KEY)) || {
-      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 84144.0, shares: 0.188, side: 'LONG', tag: '突破多單' }] }
+      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 84967.0, shares: 0.166, side: 'LONG', tag: '4H波段多單' }] }
     };
 
     let UNIVERSE_TW = { ...TW_STOCK_DICTIONARY };
@@ -397,7 +397,7 @@
     }
 
     async function fetchTWKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_tw_v20_${code}`;
+      const cacheKey = `kline_cache_tw_v21_${code}`;
       if (!forceRefresh) {
         try {
           const cache = localStorage.getItem(cacheKey);
@@ -448,7 +448,7 @@
       throw new Error(`台股 ${code} 連線異常`);
     }
 
-    async function fetchBinanceKlines(symbol, interval = '15m', limit = 220) {
+    async function fetchBinanceKlines(symbol, interval = '4h', limit = 220) {
       const url = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(`Binance API HTTP ${res.status}`);
@@ -474,56 +474,35 @@
       }
     }
 
+    // =========================================================================
+    // 核心修復 1：時框約束引擎 (徹底消除 4H/1D 停損被硬壓縮至 1.49% 的 Bug)
+    // =========================================================================
     function getTimeframeBoxConstraints(tf, isCrypto, isFinancial, curPrice, atr14) {
-      let maxRatio = 0.08;
-      let minRatio = 0.015;
-      let maxAtrMult = 4.0;
-      let maxSLPct = 1.8;
+      let maxRatio = 0.08, minRatio = 0.015, maxAtrMult = 4.0, maxSLPct = 2.0;
+      let defaultAtrStopPad = 0.3;
 
       if (isCrypto) {
         if (tf === '15m') {
-          maxRatio = 0.018;
-          minRatio = 0.004;
-          maxAtrMult = 3.6;
-          maxSLPct = 1.2;
+          maxRatio = 0.018; minRatio = 0.004; maxAtrMult = 3.6; maxSLPct = 1.2; defaultAtrStopPad = 0.25;
         } else if (tf === '1h') {
-          maxRatio = 0.038;
-          minRatio = 0.008;
-          maxAtrMult = 4.2;
-          maxSLPct = 1.8;
+          maxRatio = 0.038; minRatio = 0.008; maxAtrMult = 4.2; maxSLPct = 2.0; defaultAtrStopPad = 0.35;
         } else if (tf === '4h') {
-          maxRatio = 0.075;
-          minRatio = 0.015;
-          maxAtrMult = 4.8;
-          maxSLPct = 3.2;
-        } else {
-          maxRatio = 0.140;
-          minRatio = 0.025;
-          maxAtrMult = 5.5;
-          maxSLPct = 5.0;
+          // 4H 級別解鎖足夠的波段呼吸空間 (允許 3.6% 停損，匹配 4H 翻箱目標)
+          maxRatio = 0.085; minRatio = 0.015; maxAtrMult = 5.0; maxSLPct = 3.6; defaultAtrStopPad = 0.45;
+        } else { // 1d
+          maxRatio = 0.150; minRatio = 0.025; maxAtrMult = 6.0; maxSLPct = 5.5; defaultAtrStopPad = 0.60;
         }
       } else {
         if (isFinancial) {
           maxRatio = (tf === 'D') ? 0.07 : ((tf === 'W') ? 0.12 : 0.18);
-          minRatio = 0.02;
-          maxAtrMult = 4.0;
-          maxSLPct = 2.2;
+          minRatio = 0.02; maxAtrMult = 4.0; maxSLPct = 2.2; defaultAtrStopPad = 0.3;
         } else {
           if (tf === 'D') {
-            maxRatio = 0.12;
-            minRatio = 0.03;
-            maxAtrMult = 4.5;
-            maxSLPct = 2.8;
+            maxRatio = 0.12; minRatio = 0.03; maxAtrMult = 4.5; maxSLPct = 3.0; defaultAtrStopPad = 0.4;
           } else if (tf === 'W') {
-            maxRatio = 0.22;
-            minRatio = 0.05;
-            maxAtrMult = 5.5;
-            maxSLPct = 5.5;
+            maxRatio = 0.22; minRatio = 0.05; maxAtrMult = 5.5; maxSLPct = 5.5; defaultAtrStopPad = 0.6;
           } else {
-            maxRatio = 0.35;
-            minRatio = 0.08;
-            maxAtrMult = 6.5;
-            maxSLPct = 9.0;
+            maxRatio = 0.35; minRatio = 0.08; maxAtrMult = 6.5; maxSLPct = 9.0; defaultAtrStopPad = 0.8;
           }
         }
       }
@@ -531,12 +510,13 @@
       return {
         maxBoxH: Math.min(curPrice * maxRatio, maxAtrMult * atr14),
         minBoxH: Math.max(curPrice * minRatio, 1.0 * atr14),
-        maxSLPct
+        maxSLPct,
+        defaultAtrStopPad
       };
     }
 
     // =========================================================================
-    // 3. 雙向亞當理論演算引擎 (含 T0 先遣保本點、多時框約束與瀑布熔斷)
+    // 核心修復 2：雙向結構辨識 (含前方跑道檢測 Runway Filter 與真實結構停損錨定)
     // =========================================================================
     function analyzeBidirectionalStructure(klines, code = '') {
       if (!klines || klines.length < 25) return;
@@ -547,8 +527,9 @@
 
       const ma7 = klines.slice(-7).reduce((s, k) => s + k.close, 0) / 7;
       const ma10 = klines.slice(-10).reduce((s, k) => s + k.close, 0) / 10;
-      const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
-      const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma20;
+      const ma25 = klines.slice(-Math.min(25, len)).reduce((s, k) => s + k.close, 0) / Math.min(25, len);
+      const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma25;
+      const ma99 = len >= 90 ? (klines.slice(-Math.min(99, len)).reduce((s, k) => s + k.close, 0) / Math.min(99, len)) : ma60;
 
       let trSum14 = 0;
       const atrPeriod = Math.min(14, len - 1);
@@ -556,15 +537,14 @@
         trSum14 += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close), Math.abs(klines[i].low - klines[i - 1].close));
       }
       const atr14 = Math.max(curPrice * 0.002, trSum14 / atrPeriod);
-      const bias20 = ((curPrice - ma20) / ma20) * 100;
+      const bias25 = ((curPrice - ma25) / ma25) * 100;
 
       const tfConstraints = getTimeframeBoxConstraints(currentTimeframe, isCrypto, isFinancial, curPrice, atr14);
 
+      // 天量長黑瀑布檢測
       let volSum20 = 0;
       const volPeriod = Math.min(20, len - 1);
-      for (let i = len - volPeriod; i < len; i++) {
-        volSum20 += (klines[i].volume || 0);
-      }
+      for (let i = len - volPeriod; i < len; i++) volSum20 += (klines[i].volume || 0);
       const avgVol20 = volPeriod > 0 ? (volSum20 / volPeriod) : 1;
 
       let maxVolSpike = 0;
@@ -585,42 +565,14 @@
       const recent3DropPct = ((recent3High - curPrice) / recent3High) * 100;
       const isWaterfallDrop = (recent3DropPct > (isCrypto ? (currentTimeframe === '15m' ? 1.6 : 2.5) : 3.2)) && (recent3High - curPrice > 1.6 * atr14);
 
-      const topPlateauSlice = klines.slice(Math.max(0, len - 35), Math.max(0, len - 3));
-      const topPlateauLow = topPlateauSlice.length >= 8 ? Math.min(...topPlateauSlice.map(k => k.low)) : 0;
-      const isTopNecklineBroken = (topPlateauLow > 0) && (curPrice < topPlateauLow);
+      // 震盪泥淖 (Chop) 檢測：短期與長期均線過度黏稠，假突破高發期
+      const maClusterDispersion = ((Math.max(ma7, ma25, ma99) - Math.min(ma7, ma25, ma99)) / curPrice) * 100;
+      const isChopMarket = (maClusterDispersion < (isCrypto ? (currentTimeframe === '15m' ? 0.45 : 0.85) : 1.1)) && !hasPanicDump;
 
-      const checkBars = Math.min(16, len);
-      const slice16 = klines.slice(-checkBars);
-      const high16 = Math.max(...slice16.map(k => k.high));
-      const low16 = Math.min(...slice16.map(k => k.low));
-      const range16Pct = ((high16 - low16) / curPrice) * 100;
-      const isStagnant = (range16Pct <= (currentTimeframe === '15m' ? 0.8 : 1.5) && checkBars >= 14);
-
-      const microBars = Math.min(8, len);
-      const sliceMicro = klines.slice(-microBars);
-      const microLow = Math.min(...sliceMicro.map(k => k.low));
-      const microHigh = Math.max(...sliceMicro.map(k => k.high));
-
-      let macroRegime = 'NEUTRAL';
-      let regimeDesc = '';
-
-      if (hasPanicDump || isWaterfallDrop) {
-        macroRegime = 'BEAR_PANIC';
-        regimeDesc = '🔴 巨量崩跌破位 · 瀑布釋放中';
-      } else if (curPrice >= ma60 && ma20 >= ma60 * 0.99) {
-        macroRegime = 'BULL';
-        regimeDesc = '🟢 多頭主升浪 (生命線之上)';
-      } else if (curPrice < ma60 && ma20 < ma60) {
-        macroRegime = 'BEAR';
-        regimeDesc = '🔴 空頭下行浪 (生命線之下)';
-      } else {
-        macroRegime = 'NEUTRAL';
-        regimeDesc = '🟡 均線糾結·多空爭奪區';
-      }
-
+      // 依時框確定回溯區間
       const lookback = (isCrypto && currentTimeframe === '15m')
         ? Math.min(18, len)
-        : ((isCrypto && currentTimeframe === '1h') ? Math.min(30, len) : Math.min(65, len));
+        : ((isCrypto && currentTimeframe === '1h') ? Math.min(30, len) : Math.min(55, len));
 
       const recentSlice = klines.slice(-lookback);
       const maxBody = Math.max(...recentSlice.map(k => Math.max(k.open, k.close)));
@@ -631,8 +583,30 @@
       const effectiveHigh = (peakHigh > maxBody * 1.04) ? (maxBody * 1.015) : peakHigh;
       const effectiveLow = (troughLow < minBody * 0.96) ? (minBody * 0.985) : troughLow;
 
+      const microBars = (currentTimeframe === '15m') ? Math.min(8, len) : Math.min(12, len);
+      const sliceMicro = klines.slice(-microBars);
+      const microLow = Math.min(...sliceMicro.map(k => k.low));
+      const microHigh = Math.max(...sliceMicro.map(k => k.high));
+
       let boxH = effectiveHigh - effectiveLow;
       boxH = Math.max(tfConstraints.minBoxH, Math.min(boxH, tfConstraints.maxBoxH));
+
+      let macroRegime = 'NEUTRAL';
+      let regimeDesc = '';
+
+      if (hasPanicDump || isWaterfallDrop) {
+        macroRegime = 'BEAR_PANIC';
+        regimeDesc = '🔴 巨量崩跌破位 · 瀑布釋放中';
+      } else if (curPrice >= ma60 && ma25 >= ma60 * 0.99) {
+        macroRegime = 'BULL';
+        regimeDesc = '🟢 多頭主升浪 (生命線之上)';
+      } else if (curPrice < ma60 && ma25 < ma60) {
+        macroRegime = 'BEAR';
+        regimeDesc = '🔴 空頭下行浪 (生命線之下)';
+      } else {
+        macroRegime = 'NEUTRAL';
+        regimeDesc = '🟡 均線糾結·多空爭奪區';
+      }
 
       let direction = 'LONG';
       let entry = 0, stop = 0, t0 = 0, t1 = 0, t2 = 0;
@@ -640,145 +614,160 @@
       let trafficLight = 'GREEN';
       let actionable = true;
 
-      if (hasPanicDump || isWaterfallDrop || (isTopNecklineBroken && curPrice < ma7)) {
+      // -------------------------------------------------------------
+      // 策略分支與停損錨定 (消除錯誤的 1.2*ATR 夾角)
+      // -------------------------------------------------------------
+      if (hasPanicDump || isWaterfallDrop) {
         direction = 'SHORT';
         trafficLight = 'RED';
         actionable = false;
 
         const needleLow = Math.min(...klines.slice(-4).map(k => k.low));
-        const bounce382 = parseFloat((needleLow + (recent3High - needleLow) * 0.382).toFixed(isCrypto ? 2 : 2));
         const bounce500 = parseFloat((needleLow + (recent3High - needleLow) * 0.500).toFixed(isCrypto ? 2 : 2));
-        const isExtremelyWeak = (curPrice < bounce382);
-
-        if (isExtremelyWeak) {
-          type = '⛔ 瀑布熔斷 · 弱勢熊旗走平';
-          entry = parseFloat((needleLow * 0.998).toFixed(isCrypto ? 2 : 2));
-          stop = parseFloat((curPrice + 1.2 * atr14).toFixed(isCrypto ? 2 : 2));
-          t0 = needleLow;
-          t1 = parseFloat((needleLow - boxH).toFixed(isCrypto ? 2 : 2));
-          t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
-          rationale = `⚠️ 瀑布暴跌後連 0.382 反抽位 ($${formatPrice(bounce382)}) 都無法觸及，走勢極端弱勢！切忌在 $${formatPrice(curPrice)} 地板追空；若要做空，建議設定條件觸價單：實體破位前低 $${formatPrice(needleLow)} 順勢開空，或等待橫盤 6 根以上構築新底座。`;
-        } else {
-          type = '⛔ 爆量崩跌熔斷 · 逢高死貓空';
-          entry = bounce500;
-          stop = parseFloat((recent3High + 0.3 * atr14).toFixed(isCrypto ? 2 : 2));
-          t0 = needleLow;
-          t1 = parseFloat((needleLow - boxH * 0.5).toFixed(isCrypto ? 2 : 2));
-          t2 = parseFloat((needleLow - boxH).toFixed(isCrypto ? 2 : 2));
-          rationale = `⚠️ 單根天量清算長黑（放量 ${maxVolSpike.toFixed(1)} 倍）！禁止左側抄底多單。預約於 50% 費氏強阻力位 ($${formatPrice(bounce500)}) 限價做空；若成交，跌回 T0 前低 $${formatPrice(needleLow)} 時必須先出 40% 並推保本！`;
-        }
+        type = '⛔ 爆量崩跌熔斷 · 瀑布釋放';
+        entry = parseFloat((needleLow * 0.998).toFixed(isCrypto ? 2 : 2));
+        stop = parseFloat((recent3High + tfConstraints.defaultAtrStopPad * atr14).toFixed(isCrypto ? 2 : 2));
+        t0 = needleLow;
+        t1 = parseFloat((needleLow - boxH).toFixed(isCrypto ? 2 : 2));
+        t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
+        rationale = `⚠️ 放量長黑灌破生命線！禁止抄底多單。破位前低 $${formatPrice(needleLow)} 順勢開空，或等待 4H 構築紮實微型底座。`;
 
       } else if (macroRegime === 'BEAR') {
         const isBreakingDown = (curPrice <= effectiveLow * 1.008);
-        if (bias20 < -8.0 && curPrice <= effectiveLow * 0.98 && !hasPanicDump) {
+        if (bias25 < -8.0 && curPrice <= effectiveLow * 0.98) {
           direction = 'LONG';
           type = '⚡ 負乖離過大·超跌搶反彈';
           entry = curPrice;
-          stop = curPrice - 1.0 * atr14;
+          stop = curPrice - 1.2 * atr14;
           t0 = curPrice + 1.0 * atr14;
-          t1 = Math.min(effectiveLow, ma20);
-          t2 = ma20;
-          rationale = `長線處於生命線下，但 20MA 負乖離達 ${bias20.toFixed(1)}%！出現短線超跌；僅限以 1.0×ATR 小額短打反彈，嚴禁長抱！`;
+          t1 = Math.min(effectiveLow, ma25);
+          t2 = ma25;
+          rationale = `25MA 負乖離達 ${bias25.toFixed(1)}%！出現短線超跌；僅限以 1.0×ATR 小額短打，嚴禁長抱！`;
         } else if (isBreakingDown) {
           direction = 'SHORT';
-          type = isCrypto ? '📉 破位下殺·亞當反向翻箱' : '📉 破位下殺·融券放空/避險';
+          type = isCrypto ? '📉 破位下殺·亞當反向翻箱' : '📉 破位下殺·融券避險';
           entry = effectiveLow;
-          stop = Math.min(microHigh + 0.4 * atr14, entry + 1.2 * atr14);
+          // 空單停損錨定於實質波段微型高點，不隨意人為壓縮
+          stop = microHigh + tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, stop - entry);
           t0 = parseFloat((entry - r).toFixed(isCrypto ? 2 : 2));
           t1 = parseFloat((effectiveLow - boxH).toFixed(isCrypto ? 2 : 2));
           t2 = parseFloat((t1 - boxH).toFixed(isCrypto ? 2 : 2));
-          rationale = `生命線空頭排列，且跌破箱體底座 $${formatPrice(effectiveLow)}！啟動反向翻箱，防守緊貼微型高點 $${formatPrice(stop)}。`;
+          rationale = `跌破箱體底座 $${formatPrice(effectiveLow)}！啟動反向翻箱，防守嚴格設於結構高點 $${formatPrice(stop)}。`;
         } else {
           direction = 'SHORT';
           type = '⚠️ 弱勢反抽·阻力承壓空';
           entry = Math.min(curPrice, effectiveHigh);
-          stop = Math.min(microHigh + 0.4 * atr14, entry + 1.2 * atr14);
+          stop = microHigh + tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, stop - entry);
           t0 = parseFloat((entry - r).toFixed(isCrypto ? 2 : 2));
           t1 = effectiveLow;
           t2 = effectiveLow - boxH;
-          rationale = `長線空方掌控，短線反抽至均線 ($${formatPrice(ma20)}) 遇阻；逢高掛單佈局空單，嚴格設防。`;
+          rationale = `反抽至均線 ($${formatPrice(ma25)}) 遇阻；逢高掛單佈局空單，防守高點。`;
         }
       } else {
         direction = 'LONG';
         const isBreakingUp = (curPrice >= effectiveHigh * 0.992);
 
-        if (bias20 > (isCrypto ? 5.5 : 4.5) && isBreakingUp) {
+        if (bias25 > (isCrypto ? 5.5 : 4.5) && isBreakingUp) {
           type = '⚠️ 短線暴衝·防插針拉回';
-          const safePullback = Math.max(ma10, effectiveHigh * 0.985);
-          entry = safePullback;
-          stop = Math.max(microLow - 0.4 * atr14, entry - 1.2 * atr14);
+          entry = Math.max(ma10, effectiveHigh * 0.985);
+          stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, entry - stop);
           t0 = parseFloat((entry + r).toFixed(isCrypto ? 2 : 2));
           t1 = effectiveHigh + boxH;
           t2 = t1 + boxH;
-          rationale = `短線暴衝乖離達 ${bias20.toFixed(1)}%！無底座支撐，拒絕追高，預約於 10MA ($${formatPrice(entry)}) 回踩接單。`;
+          rationale = `短線暴衝乖離達 ${bias25.toFixed(1)}%！無底座支撐，預約於 10MA ($${formatPrice(entry)}) 回踩接單。`;
         } else if (isBreakingUp) {
           type = '🚀 頸線突破·亞當向上翻倍';
           entry = effectiveHigh;
-          stop = Math.max(microLow - 0.4 * atr14, entry - 1.2 * atr14);
+          // 【關鍵修正】：停損錨定於實質波段起漲底座 microLow，在 4H 給足 2.5%~3.5% 空間
+          stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, entry - stop);
           t0 = parseFloat((entry + r).toFixed(isCrypto ? 2 : 2));
           t1 = effectiveHigh + boxH;
           t2 = t1 + boxH;
-          rationale = `均線多頭發散，站穩頸線 $${formatPrice(effectiveHigh)}！以微型底座 ($${formatPrice(stop)}) 防守，向上測幅至 $${formatPrice(t1)}。`;
+          rationale = `站穩頸線 $${formatPrice(effectiveHigh)}！以波段真實起漲底座 ($${formatPrice(stop)}) 防守，波段測幅至 $${formatPrice(t1)}。`;
         } else if (curPrice <= effectiveLow * 1.02) {
           type = '🛡️ 底座止跌·極限低吸';
           entry = effectiveLow + 0.3 * atr14;
-          stop = effectiveLow - 0.6 * atr14;
+          stop = effectiveLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, entry - stop);
           t0 = parseFloat((entry + r).toFixed(isCrypto ? 2 : 2));
           t1 = effectiveHigh;
           t2 = effectiveHigh + boxH;
-          rationale = `回測多頭密集底座 $${formatPrice(effectiveLow)}，盈虧比極佳，停損嚴格守破底。`;
+          rationale = `回測多頭密集底座 $${formatPrice(effectiveLow)}，盈虧比極佳，停損嚴守破底。`;
         } else {
           type = '📈 順勢均線·回踩佈局';
-          entry = Math.max(ma20, curPrice - 0.4 * atr14);
-          stop = Math.max(microLow - 0.4 * atr14, entry - 1.2 * atr14);
+          entry = Math.max(ma25, curPrice - 0.4 * atr14);
+          stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.001, entry - stop);
           t0 = parseFloat((entry + r).toFixed(isCrypto ? 2 : 2));
           t1 = entry + boxH;
           t2 = t1 + boxH;
-          rationale = `處於 20 均線上方順勢運行，於 20MA ($${formatPrice(ma20)}) 附近限價掛單承接。`;
+          rationale = `順勢運行於 25MA 之上，於 25MA ($${formatPrice(ma25)}) 附近掛單承接。`;
         }
       }
 
+      // 核算風控
       let risk = (direction === 'SHORT') ? Math.max(curPrice * 0.001, stop - entry) : Math.max(curPrice * 0.001, entry - stop);
       let reward = (direction === 'SHORT') ? Math.max(curPrice * 0.001, entry - t1) : Math.max(curPrice * 0.001, t1 - entry);
       const rr = parseFloat((reward / risk).toFixed(1));
       const slPct = parseFloat(((risk / entry) * 100).toFixed(2));
 
-      // 若 t0 未設定，預設為進場點 +/- 1R
-      if (!t0 || t0 === 0) {
-        t0 = direction === 'SHORT' ? (entry - risk) : (entry + risk);
+      // -------------------------------------------------------------
+      // 核心修復 3：前方利潤跑道空間過濾 (Runway Filter)
+      // -------------------------------------------------------------
+      if (direction === 'LONG') {
+        let nearestCeiling = Infinity;
+        if (ma99 > curPrice * 1.002) nearestCeiling = Math.min(nearestCeiling, ma99);
+        if (peakHigh > curPrice * 1.002) nearestCeiling = Math.min(nearestCeiling, peakHigh);
+
+        const runway = nearestCeiling - entry;
+        // 如果上方第一道鐵板距離進場點小於 1.0 倍風險，代表沒有奔跑空間
+        if (runway > 0 && runway < 1.0 * risk) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = '⛔ 空間受阻 · 頂部鐵板壓制';
+          rationale = `⚠️ 距離上方長期生命線/前高強阻力 ($${formatPrice(nearestCeiling)}) 僅剩 ${Math.round(runway)} 點 (< 1.0R)，缺乏利潤跑道！嚴禁在鐵板正前方追多，極易遭遇假突破反殺！`;
+        }
+      } else {
+        let nearestFloor = -Infinity;
+        if (ma99 < curPrice * 0.998) nearestFloor = Math.max(nearestFloor, ma99);
+        if (troughLow < curPrice * 0.998) nearestFloor = Math.max(nearestFloor, troughLow);
+
+        const downwardRunway = entry - nearestFloor;
+        if (downwardRunway > 0 && downwardRunway < 1.0 * risk) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = '⛔ 空間受阻 · 底部支撐密集';
+          rationale = `⚠️ 距離下方長期生命線/前低支撐 ($${formatPrice(nearestFloor)}) 僅剩 ${Math.round(downwardRunway)} 點 (< 1.0R)，下翻動能受阻！嚴禁在鐵板正上方追空！`;
+        }
       }
-      t0 = parseFloat(t0.toFixed(isCrypto ? 2 : 2));
+
+      if (trafficLight === 'GREEN') {
+        if (isChopMarket) {
+          trafficLight = 'YELLOW';
+          type = '⚪ 均線密集糾結 · 震盪洗盤期';
+          rationale = `⚠️ 各週期均線間距小於 0.8%，處於無方向混亂洗盤！突破策略勝率極低，建議等待帶量脫離此泥淖區。`;
+        } else if (slPct > tfConstraints.maxSLPct) {
+          trafficLight = 'RED';
+          actionable = false;
+          type = `⛔ 風控過深 (${slPct}%)`;
+          rationale = `⚠️ 停損距離達 ${slPct}%（超過本時框 ${tfConstraints.maxSLPct}% 上限）！起漲點過遠，禁止開倉！`;
+        } else if (rr < 1.6) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = `⚠️ 盈虧比不佳 (1:${rr})`;
+          rationale = `當前預期利潤與承擔風險比例僅 1:${rr}，低於最低 1:1.6 門檻。`;
+        }
+      }
 
       let entryLabel = '建議買點';
       if (direction === 'SHORT') {
         entryLabel = (entry < curPrice * 0.998) ? '破位觸價空點' : '反抽承壓空點';
       } else {
         entryLabel = (entry > curPrice * 1.002) ? '突破追價買點' : '回踩建議買點';
-      }
-
-      if (trafficLight !== 'RED') {
-        if (slPct > tfConstraints.maxSLPct) {
-          trafficLight = 'RED';
-          actionable = false;
-          type = `⛔ 風控熔斷 · 停損過深 (${slPct}%)`;
-          rationale = `⚠️ 停損距離達 ${slPct}%（超過本時框 ${tfConstraints.maxSLPct}% 上限）！起漲點過遠且缺乏緊湊底座，程式強制熔斷禁止開倉！`;
-        } else if (isStagnant) {
-          trafficLight = 'YELLOW';
-          actionable = false;
-          type = `⏰ 動能衰退 · 橫盤沉睡`;
-          rationale = `⚠️ 近 16 根 K 棒處於極窄幅震盪（振幅僅 ${range16Pct.toFixed(1)}%），爆發力已耗盡，建議空倉觀望。`;
-        } else if (rr < 1.6) {
-          trafficLight = 'YELLOW';
-          actionable = false;
-          type = `⚠️ 盈虧比不佳 (1:${rr})`;
-          rationale = `當前預期利潤與承擔風險比例僅 1:${rr}，低於最低 1:1.6 門檻，建議等待更佳點位。`;
-        }
       }
 
       currentStructure = {
@@ -802,14 +791,14 @@
         slPct,
         trafficLight,
         actionable,
-        isStagnant,
-        stagnantBars: checkBars,
+        isStagnant: false,
+        stagnantBars: 0,
         rationale
       };
     }
 
     // =========================================================================
-    // 4. 持倉簿記風控計算 (含單向棘輪追蹤停損與 15M 時間衰退警報)
+    // 核心修復 4：持倉簿記時框動態防守 (徹底解除 4H 被硬閹割為 1.8% 停損的限制)
     // =========================================================================
     function calculatePortfolioLevels(profile, curPrice, klines) {
       const isCrypto = (currentMarket === 'CRYPTO');
@@ -855,12 +844,16 @@
       const recentLow8 = Math.min(...recent8.map(k => k.low));
       const recentHigh8 = Math.max(...recent8.map(k => k.high));
 
-      // 15M 突破動能超時檢驗：4 根 K 棒走不出方向
-      const checkStagnantBars = (currentTimeframe === '15m') ? 4 : 14;
-      const sliceHolding = klines.slice(-checkStagnantBars);
-      const hMax = Math.max(...sliceHolding.map(k => k.high));
-      const hMin = Math.min(...sliceHolding.map(k => k.low));
-      const isHoldingStagnant = ((hMax - hMin) / avgCost) < (currentTimeframe === '15m' ? 0.005 : 0.016) && (Math.abs(curPrice - avgCost) / avgCost) < 0.006;
+      // 4H 允許更充裕的波段防守，不再死板卡在 1.8%
+      let tfMaxRiskPct = 0.020;
+      if (isCrypto) {
+        if (currentTimeframe === '15m') tfMaxRiskPct = 0.012;
+        else if (currentTimeframe === '1h') tfMaxRiskPct = 0.020;
+        else if (currentTimeframe === '4h') tfMaxRiskPct = 0.038; // 4H 容許 3.8%
+        else tfMaxRiskPct = 0.060;
+      } else {
+        tfMaxRiskPct = (currentTimeframe === 'D') ? 0.035 : 0.065;
+      }
 
       const t1 = currentStructure.t1;
       let portStop = 0;
@@ -868,19 +861,20 @@
       let b2Label = '';
       let isBreakevenLocked = false;
 
-      // 【核心升級：單向棘輪 Ratchet 移動停損機制】
       if (!isShort) {
         const isProfit = (curPrice > avgCost);
 
         if (isProfit) {
-          // 多單獲利：防守線單向「向上墊高」（Math.max）
-          const lockProfitStop = Math.max(avgCost * 1.001, recentLow8 - 0.2 * atr14);
-          const trailingStop = Math.max(lockProfitStop, curPrice - 0.9 * atr14);
+          // 多單獲利：單向向上墊高 (Ratchet)
+          const isPastT0 = (curPrice >= avgCost + 1.0 * atr14);
+          const lockProfitStop = isPastT0 ? Math.max(avgCost * 1.001, recentLow8 - 0.2 * atr14) : (avgCost * 0.998);
+          const trailingStop = Math.max(lockProfitStop, curPrice - 1.2 * atr14);
           portStop = parseFloat(trailingStop.toFixed(isCrypto ? 2 : 2));
           if (portStop >= avgCost * 0.998) isBreakevenLocked = true;
         } else {
-          const maxAllowedRisk = avgCost - Math.max(avgCost * (isCrypto ? 0.018 : 0.025), 1.2 * atr14);
-          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentLow8 - 0.6 * atr14);
+          // 未獲利：依據當前時框真實底座設防，不再被 1.8% 提前打掉
+          const maxAllowedRisk = avgCost - (avgCost * tfMaxRiskPct);
+          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentLow8 - 0.5 * atr14);
           portStop = parseFloat(Math.max(maxAllowedRisk, structuralStop).toFixed(isCrypto ? 2 : 2));
         }
 
@@ -899,14 +893,15 @@
         const isProfit = (curPrice < avgCost);
 
         if (isProfit) {
-          // 空單獲利：防守線單向「向下壓縮鎖利」（Math.min）
-          const lockProfitStop = Math.min(avgCost * 0.999, recentHigh8 + 0.2 * atr14);
-          const trailingStop = Math.min(lockProfitStop, curPrice + 0.9 * atr14);
+          // 空單獲利：單向向下壓低 (Ratchet)
+          const isPastT0 = (curPrice <= avgCost - 1.0 * atr14);
+          const lockProfitStop = isPastT0 ? Math.min(avgCost * 0.999, recentHigh8 + 0.2 * atr14) : (avgCost * 1.002);
+          const trailingStop = Math.min(lockProfitStop, curPrice + 1.2 * atr14);
           portStop = parseFloat(trailingStop.toFixed(isCrypto ? 2 : 2));
           if (portStop <= avgCost * 1.002) isBreakevenLocked = true;
         } else {
-          const maxAllowedRisk = avgCost + Math.max(avgCost * (isCrypto ? 0.018 : 0.025), 1.2 * atr14);
-          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentHigh8 + 0.6 * atr14);
+          const maxAllowedRisk = avgCost + (avgCost * tfMaxRiskPct);
+          const structuralStop = currentStructure.suggestedStop > 0 ? currentStructure.suggestedStop : (recentHigh8 + 0.5 * atr14);
           portStop = parseFloat(Math.min(maxAllowedRisk, structuralStop).toFixed(isCrypto ? 2 : 2));
         }
 
@@ -932,7 +927,7 @@
         b2Label,
         isProfit: isShort ? (curPrice < avgCost) : (curPrice > avgCost),
         isBreakevenLocked,
-        isHoldingStagnant
+        isHoldingStagnant: false
       };
     }
 
@@ -1221,7 +1216,7 @@
     }
 
     // =========================================================================
-    // 5. 雙向雷達操作台 (含 T0 先遣線與智能部位計算器)
+    // 渲染雙向雷達
     // =========================================================================
     function renderHunterMode() {
       clearPriceLines();
@@ -1239,22 +1234,21 @@
       const entryLabel = currentStructure.entryLabel;
       const isCrypto = (currentMarket === 'CRYPTO');
 
-      // 繪製四級階梯防線
       addLine(entry, '#bf5af2', `👉【${entryLabel}】`, 0, 2);
       addLine(stop, '#ff453a', isShort ? '🛑【空單防守停損】' : '🛑【多單結構停損】', 0, 2);
-      addLine(t0, '#64d2ff', isShort ? '🛡️【T0先遣保本/減倉】' : '🛡️【T0先遣保本/減倉】', 2, 2);
+      addLine(t0, '#64d2ff', '🛡️【T0先遣保本】', 2, 2);
       addLine(t1, '#30d158', isShort ? '🎯【T1下翻止盈】' : '🎯【T1首波滿足】', 2, 2);
       addLine(t2, '#ffd60a', isShort ? '🏆【T2二次下翻】' : '🏆【T2二次翻倍】', 2, 2);
 
       legend.innerHTML = `
         <span class="text-apple-purple">● ${entryLabel}</span>
         <span class="text-apple-red">● 停損防守</span>
-        <span class="text-apple-cyan">● T0先遣(+1R)</span>
+        <span class="text-apple-cyan">● T0先遣</span>
         <span class="text-apple-green">● T1目標</span>
         <span class="text-apple-amber">● T2目標</span>
       `;
 
-      // 智能部位速算器運算
+      // 智能部位速算
       const slPct = Math.max(0.05, currentStructure.slPct);
       const riskCapital = userBaseEquity * (userRiskPercent / 100);
       const recommendedPosValue = riskCapital / (slPct / 100);
@@ -1316,9 +1310,9 @@
           <div class="p-2.5 rounded-xl bg-rose-950/60 border border-apple-red/40 flex items-center justify-between text-apple-red font-bold text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-apple-red"></span>
-              <span>🔴 瀑布熔斷 · 禁止開多</span>
+              <span>🔴 風控熔斷 · 禁開多單</span>
             </div>
-            <span class="font-mono text-[11px]">暴跌破位中</span>
+            <span class="font-mono text-[11px]">風險超標中</span>
           </div>
         `;
       } else {
@@ -1326,9 +1320,9 @@
           <div class="p-2.5 rounded-xl bg-amber-950/60 border border-apple-amber/40 flex items-center justify-between text-apple-amber font-bold text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-apple-amber"></span>
-              <span>🟡 動能收斂 · 觀望等待</span>
+              <span>🟡 空間受阻 / 震盪泥淖</span>
             </div>
-            <span class="font-mono text-[11px]">橫盤震盪中</span>
+            <span class="font-mono text-[11px]">觀望等待</span>
           </div>
         `;
       }
@@ -1358,7 +1352,7 @@
             </div>
           </div>
 
-          <!-- 智能倉位速算機 -->
+          <!-- 智能部位規模速算 -->
           <div class="bg-black/40 p-2.5 rounded-xl border border-white/10 space-y-1.5 font-mono text-[11px]">
             <div class="flex justify-between items-center text-apple-gray text-[10px]">
               <span class="font-bold flex items-center gap-1">🧮 智能倉位速算 (<b class="text-white">${isCrypto ? 'USDT' : 'TWD'}</b>)</span>
@@ -1385,7 +1379,7 @@
           </div>
 
           <button onclick="addBatchFromHunter()" class="w-full py-2 text-xs ${tl === 'RED' ? 'bg-zinc-800 text-apple-gray border border-white/10' : (isShort ? 'bg-rose-600 hover:bg-rose-500 text-white' : 'bg-apple-blue hover:opacity-90 text-white')} active:scale-95 rounded-xl font-black transition shadow flex items-center justify-center gap-1.5">
-            <span>💼</span> <span>${tl === 'RED' ? '⚠️ 當前風控不合格 (仍可強行記錄)' : `記錄至持倉簿記 (${isShort ? '建立空單' : '建立多單'})`}</span>
+            <span>💼</span> <span>${tl === 'RED' ? '⚠️ 當前風控不合格 (仍可記錄)' : `記錄至持倉簿記 (${isShort ? '建立空單' : '建立多單'})`}</span>
           </button>
         </div>
 
@@ -1442,6 +1436,9 @@
       }
     }
 
+    // =========================================================================
+    // 渲染持倉簿記
+    // =========================================================================
     function renderPortfolioMode() {
       clearPriceLines();
       const container = document.getElementById('panel-content-container');
@@ -1608,7 +1605,7 @@
       profile.batches.push({
         id: newId,
         cost: entryPrice,
-        shares: isCrypto ? 0.2 : 5000,
+        shares: isCrypto ? 0.166 : 5000,
         side: currentStructure.direction || 'LONG',
         tag: currentStructure.strategyType ? currentStructure.strategyType.split(' ')[0] : '動態建倉'
       });
@@ -1732,19 +1729,11 @@
           actualRisk = Math.max(0, (portCalc.portStop - avgCost) * totalShares);
         }
 
-        const stagnationHtml = portCalc.isHoldingStagnant ? `
-          <div class="text-[11px] p-1.5 rounded-lg bg-amber-950/60 border border-apple-amber/40 text-apple-amber font-bold flex items-center justify-between">
-            <span>⏰ 15M 突破動能超時：橫盤已逾 4 根 K 棒</span>
-            <span class="text-white underline cursor-pointer" onclick="setDashboardMode('PORTFOLIO')">建議保本平倉撤離</span>
-          </div>
-        ` : '';
-
         hud.innerHTML = `
-          ${stagnationHtml}
           <div class="text-apple-gray font-bold text-xs border-b border-white/10 pb-0.5 flex justify-between">
             <span>持倉風控監控 (${batches.length} 筆)</span>
             <span class="${portCalc.isBreakevenLocked ? 'text-apple-green' : 'text-apple-red'} font-black">
-              ${portCalc.isBreakevenLocked ? '🛡️ 棘輪鎖利防守: $' + formatPrice(portCalc.portStop) : '🛑 移動防守: $' + formatPrice(portCalc.portStop)}
+              ${portCalc.isBreakevenLocked ? '🛡️ 棘輪鎖利防守: $' + formatPrice(portCalc.portStop) : '🛑 波段移動防守: $' + formatPrice(portCalc.portStop)}
             </span>
           </div>
           <div class="flex justify-between text-apple-gray text-xs">
@@ -1937,14 +1926,14 @@
         }
       } else {
         title.innerHTML = `<span>🔥</span> <span>主流幣波段波動與乖離篩選器</span>`;
-        desc.innerHTML = `依據 1H 週期真實 ATR 波動比率與 20MA 偏離度，快速定位高彈性翻箱機會`;
+        desc.innerHTML = `依據 1H/4H 週期真實 ATR 波動比率與 25MA 偏離度，快速定位高彈性翻箱機會`;
         thead.innerHTML = `
           <tr class="border-b border-white/10 text-apple-gray text-xs">
             <th class="py-2 px-3">交易對</th>
             <th class="py-2 px-3">名稱</th>
             <th class="py-2 px-3">現價 (USDT)</th>
             <th class="py-2 px-3">ATR 波動率</th>
-            <th class="py-2 px-3">20MA 乖離</th>
+            <th class="py-2 px-3">25MA 乖離</th>
             <th class="py-2 px-3 text-center">狀態</th>
             <th class="py-2 px-3 text-center">動作</th>
           </tr>
@@ -1955,11 +1944,11 @@
           const rows = [];
           for (let sym of symbols) {
             try {
-              const klines = await fetchBinanceKlines(sym, '1h', 40);
+              const klines = await fetchBinanceKlines(sym, '4h', 40);
               if (klines.length >= 20) {
                 const curClose = klines[klines.length - 1].close;
-                const ma20 = klines.slice(-20).reduce((s, k) => s + k.close, 0) / 20;
-                const bias = ((curClose - ma20) / ma20) * 100;
+                const ma25 = klines.slice(-25).reduce((s, k) => s + k.close, 0) / 25;
+                const bias = ((curClose - ma25) / ma25) * 100;
                 let tr = 0;
                 for (let i = klines.length - 14; i < klines.length; i++) {
                   tr += Math.max(klines[i].high - klines[i].low, Math.abs(klines[i].high - klines[i - 1].close));
@@ -2045,7 +2034,7 @@
         btnTW.className = 'px-3 py-1 rounded-lg text-apple-gray hover:text-white transition whitespace-nowrap';
         tokenBtn.classList.add('hidden');
         currentCode = 'BTCUSDT';
-        currentTimeframe = '15m';
+        currentTimeframe = '4h';
         document.getElementById('label-tab-hunter').innerText = '主流雷達';
         document.getElementById('label-tab-value').innerText = '波動篩選';
       } else {
