@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro v22 Precision)</title>
+  <title>量化波段與亞當對稱翻箱終端 (Crypto & Stocks Pro v23 Ultra-Filter)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -318,15 +318,15 @@
     let userBaseEquity = parseFloat(localStorage.getItem('adam_user_base_equity')) || 10000;
     let userRiskPercent = parseFloat(localStorage.getItem('adam_user_risk_pct')) || 2.0;
 
-    const STORAGE_TW_KEY = 'macro_trader_universe50_v22_precision';
-    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v22_precision';
+    const STORAGE_TW_KEY = 'macro_trader_universe50_v23_ultra';
+    const STORAGE_CRYPTO_KEY = 'crypto_adam_trader_v23_ultra';
 
     let twProfiles = JSON.parse(localStorage.getItem(STORAGE_TW_KEY)) || {
       '9945': { name: '潤泰新', batches: [{ id: 'b_tw_1', cost: 26.1, shares: 63818, side: 'LONG', tag: '核心多單' }] }
     };
 
     let cryptoProfiles = JSON.parse(localStorage.getItem(STORAGE_CRYPTO_KEY)) || {
-      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 84967.0, shares: 0.166, side: 'LONG', tag: '4H波段多單' }] }
+      'BTCUSDT': { name: '比特幣 (BTC)', batches: [{ id: 'b_crypto_1', cost: 84967.0, shares: 0.166, side: 'LONG', tag: '波段多單' }] }
     };
 
     let UNIVERSE_TW = { ...TW_STOCK_DICTIONARY };
@@ -371,16 +371,13 @@
       rationale: ''
     };
 
-    // =========================================================================
-    // 【核心升級：動態自適應精度計算引擎】
-    // =========================================================================
     function getAssetPrecision(price) {
       if (!price || isNaN(price)) return 2;
       const p = Math.abs(price);
-      if (p >= 50) return 2;      // BTC, ETH, SOL, 大部分股票
-      if (p >= 1) return 4;       // SUI ($1.18), NEAR, AVAX, LINK -> 4位小數
-      if (p >= 0.01) return 5;    // DOGE ($0.15), ADA, XRP -> 5位小數
-      return 8;                  // PEPE ($0.000008) -> 8位小數
+      if (p >= 50) return 2;
+      if (p >= 1) return 4;
+      if (p >= 0.01) return 5;
+      return 8;
     }
 
     function formatPrice(p, customPrecision = null) {
@@ -424,7 +421,7 @@
     }
 
     async function fetchTWKlines(code, startStr, forceRefresh = false) {
-      const cacheKey = `kline_cache_tw_v22_${code}`;
+      const cacheKey = `kline_cache_tw_v23_${code}`;
       if (!forceRefresh) {
         try {
           const cache = localStorage.getItem(cacheKey);
@@ -538,6 +535,9 @@
       };
     }
 
+    // =========================================================================
+    // 核心演算法：雙向結構辨識 (大時框對齊 HTF + 成交量檢驗 + 敏捷 T0)
+    // =========================================================================
     function analyzeBidirectionalStructure(klines, code = '') {
       if (!klines || klines.length < 25) return;
       const isCrypto = (currentMarket === 'CRYPTO');
@@ -550,6 +550,8 @@
       const ma25 = klines.slice(-Math.min(25, len)).reduce((s, k) => s + k.close, 0) / Math.min(25, len);
       const ma60 = len >= 60 ? (klines.slice(-60).reduce((s, k) => s + k.close, 0) / 60) : ma25;
       const ma99 = len >= 90 ? (klines.slice(-Math.min(99, len)).reduce((s, k) => s + k.close, 0) / Math.min(99, len)) : ma60;
+      // 跨時框 200MA (HTF 錨定線)
+      const ma200 = len >= 180 ? (klines.slice(-Math.min(200, len)).reduce((s, k) => s + k.close, 0) / Math.min(200, len)) : ma99;
 
       let trSum14 = 0;
       const atrPeriod = Math.min(14, len - 1);
@@ -565,6 +567,10 @@
       const volPeriod = Math.min(20, len - 1);
       for (let i = len - volPeriod; i < len; i++) volSum20 += (klines[i].volume || 0);
       const avgVol20 = volPeriod > 0 ? (volSum20 / volPeriod) : 1;
+
+      // 當前最新突破 K 棒放量檢測
+      const curBar = klines[len - 1];
+      const curVolRatio = avgVol20 > 0 ? ((curBar.volume || 0) / avgVol20) : 1;
 
       let maxVolSpike = 0;
       let hasPanicDump = false;
@@ -586,6 +592,10 @@
 
       const maClusterDispersion = ((Math.max(ma7, ma25, ma99) - Math.min(ma7, ma25, ma99)) / curPrice) * 100;
       const isChopMarket = (maClusterDispersion < (isCrypto ? (currentTimeframe === '15m' ? 0.45 : 0.85) : 1.1)) && !hasPanicDump;
+
+      // 【大時框趨勢錨定】
+      const isMacroDowntrend = (curPrice < ma200 && ma60 < ma200);
+      const isMacroUptrend = (curPrice > ma200 && ma60 > ma200);
 
       const lookback = (isCrypto && currentTimeframe === '15m')
         ? Math.min(18, len)
@@ -631,6 +641,9 @@
       let trafficLight = 'GREEN';
       let actionable = true;
 
+      // 【敏捷 T0 倍數：15M 短線縮短為 0.75R，快出快保本】
+      const t0Multiplier = (currentTimeframe === '15m') ? 0.75 : 1.0;
+
       if (hasPanicDump || isWaterfallDrop) {
         direction = 'SHORT';
         trafficLight = 'RED';
@@ -643,7 +656,7 @@
         t0 = roundToAssetPrec(needleLow, curPrice);
         t1 = roundToAssetPrec(needleLow - boxH, curPrice);
         t2 = roundToAssetPrec(t1 - boxH, curPrice);
-        rationale = `⚠️ 放量長黑灌破生命線！禁止抄底多單。破位前低 $${formatPrice(needleLow)} 順勢開空，或等待 4H 構築紮實微型底座。`;
+        rationale = `⚠️ 放量長黑灌破生命線！禁止抄底多單。破位前低 $${formatPrice(needleLow)} 順勢開空，或等待構築新底座。`;
 
       } else if (macroRegime === 'BEAR') {
         const isBreakingDown = (curPrice <= effectiveLow * 1.008);
@@ -662,17 +675,17 @@
           entry = effectiveLow;
           stop = microHigh + tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, stop - entry);
-          t0 = entry - r;
+          t0 = entry - (r * t0Multiplier);
           t1 = effectiveLow - boxH;
           t2 = t1 - boxH;
-          rationale = `跌破箱體底座 $${formatPrice(effectiveLow)}！啟動反向翻箱，防守嚴格設於結構高點 $${formatPrice(stop)}。`;
+          rationale = `跌破箱體底座 $${formatPrice(effectiveLow)}！啟動反向翻箱，防守結構高點 $${formatPrice(stop)}。`;
         } else {
           direction = 'SHORT';
           type = '⚠️ 弱勢反抽·阻力承壓空';
           entry = Math.min(curPrice, effectiveHigh);
           stop = microHigh + tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, stop - entry);
-          t0 = entry - r;
+          t0 = entry - (r * t0Multiplier);
           t1 = effectiveLow;
           t2 = effectiveLow - boxH;
           rationale = `反抽至均線 ($${formatPrice(ma25)}) 遇阻；逢高掛單佈局空單，防守高點。`;
@@ -686,7 +699,7 @@
           entry = Math.max(ma10, effectiveHigh * 0.985);
           stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, entry - stop);
-          t0 = entry + r;
+          t0 = entry + (r * t0Multiplier);
           t1 = effectiveHigh + boxH;
           t2 = t1 + boxH;
           rationale = `短線暴衝乖離達 ${bias25.toFixed(1)}%！無底座支撐，預約於 10MA ($${formatPrice(entry)}) 回踩接單。`;
@@ -695,7 +708,7 @@
           entry = effectiveHigh;
           stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, entry - stop);
-          t0 = entry + r;
+          t0 = entry + (r * t0Multiplier);
           t1 = effectiveHigh + boxH;
           t2 = t1 + boxH;
           rationale = `站穩頸線 $${formatPrice(effectiveHigh)}！以波段真實起漲底座 ($${formatPrice(stop)}) 防守，波段測幅至 $${formatPrice(t1)}。`;
@@ -704,7 +717,7 @@
           entry = effectiveLow + 0.3 * atr14;
           stop = effectiveLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, entry - stop);
-          t0 = entry + r;
+          t0 = entry + (r * t0Multiplier);
           t1 = effectiveHigh;
           t2 = effectiveHigh + boxH;
           rationale = `回測多頭密集底座 $${formatPrice(effectiveLow)}，盈虧比極佳，停損嚴守破底。`;
@@ -713,14 +726,13 @@
           entry = Math.max(ma25, curPrice - 0.4 * atr14);
           stop = microLow - tfConstraints.defaultAtrStopPad * atr14;
           const r = Math.max(curPrice * 0.0001, entry - stop);
-          t0 = entry + r;
+          t0 = entry + (r * t0Multiplier);
           t1 = entry + boxH;
           t2 = t1 + boxH;
           rationale = `順勢運行於 25MA 之上，於 25MA ($${formatPrice(ma25)}) 附近掛單承接。`;
         }
       }
 
-      // 動態小數位四捨五入，不再粗暴截斷為2位
       entry = roundToAssetPrec(entry, curPrice);
       stop = roundToAssetPrec(stop, curPrice);
       t0 = roundToAssetPrec(t0, curPrice);
@@ -732,7 +744,7 @@
       const rr = parseFloat((reward / risk).toFixed(1));
       const slPct = parseFloat(((risk / entry) * 100).toFixed(2));
 
-      // 跑道空間過濾
+      // 跑道空間檢測
       if (direction === 'LONG') {
         let nearestCeiling = Infinity;
         if (ma99 > curPrice * 1.002) nearestCeiling = Math.min(nearestCeiling, ma99);
@@ -743,7 +755,7 @@
           trafficLight = 'YELLOW';
           actionable = false;
           type = '⛔ 空間受阻 · 頂部鐵板壓制';
-          rationale = `⚠️ 距離上方長期生命線/前高強阻力 ($${formatPrice(nearestCeiling)}) 僅剩 ${formatPrice(runway)} 點 (< 1.0R)，缺乏利潤跑道！嚴禁在鐵板正前方追多，極易遭遇假突破反殺！`;
+          rationale = `⚠️ 距離上方長期生命線/前高強阻力 ($${formatPrice(nearestCeiling)}) 僅剩 ${formatPrice(runway)} 點 (< 1.0R)，缺乏跑道！嚴禁在鐵板正前方追多！`;
         }
       } else {
         let nearestFloor = -Infinity;
@@ -759,8 +771,26 @@
         }
       }
 
+      // 【核心升級：HTF 大時框順勢對齊 + 成交量檢驗】
       if (trafficLight === 'GREEN') {
-        if (isChopMarket) {
+        if (direction === 'LONG' && isMacroDowntrend && bias25 > -8.0) {
+          // 當前大週期處於 200MA 下方陰跌，禁止在 15M 追多
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = '⛔ 逆大時框趨勢 · 嚴禁追多';
+          rationale = `⚠️ 行情處於跨時框 200MA 宏觀下行浪之下，小週期上衝極易遭遇大戶砸盤反殺！為防止假突破，程式強制鎖死多單，請等待順勢破位空單信號。`;
+        } else if (direction === 'SHORT' && isMacroUptrend && !hasPanicDump) {
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = '⛔ 逆大時框趨勢 · 嚴禁追空';
+          rationale = `⚠️ 行情處於跨時框 200MA 宏觀多頭浪之上，小週期破位極易形成假跌破插針！程式強制鎖死空單，防止在地板被軋空。`;
+        } else if (direction === 'LONG' && curPrice >= effectiveHigh * 0.995 && curVolRatio < 1.15) {
+          // 突破但縮量 (無量誘多)
+          trafficLight = 'YELLOW';
+          actionable = false;
+          type = '⚠️ 縮量假突破 · 誘多警戒';
+          rationale = `⚠️ 價格嘗試衝擊箱體上緣，但當前量能僅為均量的 ${curVolRatio.toFixed(2)} 倍（未達 1.15 倍爆發門檻），無量空漲極高機率為假突破，拒絕追高！`;
+        } else if (isChopMarket) {
           trafficLight = 'YELLOW';
           type = '⚪ 均線密集糾結 · 震盪洗盤期';
           rationale = `⚠️ 各週期均線間距小於 0.8%，處於無方向混亂洗盤！突破策略勝率極低，建議等待帶量脫離此泥淖區。`;
@@ -875,7 +905,7 @@
         const isProfit = (curPrice > avgCost);
 
         if (isProfit) {
-          const isPastT0 = (curPrice >= avgCost + 1.0 * atr14);
+          const isPastT0 = (curPrice >= avgCost + 0.8 * atr14);
           const lockProfitStop = isPastT0 ? Math.max(avgCost * 1.001, recentLow8 - 0.2 * atr14) : (avgCost * 0.998);
           const trailingStop = Math.max(lockProfitStop, curPrice - 1.2 * atr14);
           portStop = roundToAssetPrec(trailingStop, curPrice);
@@ -901,7 +931,7 @@
         const isProfit = (curPrice < avgCost);
 
         if (isProfit) {
-          const isPastT0 = (curPrice <= avgCost - 1.0 * atr14);
+          const isPastT0 = (curPrice <= avgCost - 0.8 * atr14);
           const lockProfitStop = isPastT0 ? Math.min(avgCost * 0.999, recentHigh8 + 0.2 * atr14) : (avgCost * 1.002);
           const trailingStop = Math.min(lockProfitStop, curPrice + 1.2 * atr14);
           portStop = roundToAssetPrec(trailingStop, curPrice);
@@ -1144,7 +1174,7 @@
         rawKlines = klines;
         currentStructure.currentPrice = rawKlines[rawKlines.length - 1].close;
 
-        // 【關鍵修復】：依據當前幣種價格，動態設置圖表右側座標刻度精度
+        // 動態精度配置
         const prec = getAssetPrecision(currentStructure.currentPrice);
         const minMove = 1 / Math.pow(10, prec);
         candleSeries.applyOptions({
@@ -1171,7 +1201,7 @@
             badge.innerHTML = `<span>🔴</span> <span>風控熔斷 · 禁開多單</span>`;
           } else {
             badge.className = 'px-2.5 py-0.5 rounded-lg text-[11px] font-bold font-mono shrink-0 flex items-center gap-1 bg-amber-950/80 text-apple-amber border border-apple-amber/40 shadow-sm';
-            badge.innerHTML = `<span>🟡</span> <span>空間受阻 / 震盪泥淖</span>`;
+            badge.innerHTML = `<span>🟡</span> <span>逆大趨勢 / 縮量誘多</span>`;
           }
         }
 
@@ -1306,7 +1336,7 @@
           <div class="p-2.5 rounded-xl bg-emerald-950/60 border border-apple-green/40 flex items-center justify-between text-apple-green font-bold text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-apple-green animate-pulse"></span>
-              <span>🟢 條件合格 · 允許開倉</span>
+              <span>🟢 順大趨勢 · 條件合格</span>
             </div>
             <span class="font-mono text-[11px]">停損 ${currentStructure.slPct}% | 盈虧比 1:${currentStructure.rrRatio}</span>
           </div>
@@ -1326,9 +1356,9 @@
           <div class="p-2.5 rounded-xl bg-amber-950/60 border border-apple-amber/40 flex items-center justify-between text-apple-amber font-bold text-xs">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-apple-amber"></span>
-              <span>🟡 空間受阻 / 震盪泥淖</span>
+              <span>🟡 逆大時框趨勢 / 縮量誘多</span>
             </div>
-            <span class="font-mono text-[11px]">觀望等待</span>
+            <span class="font-mono text-[11px]">觀望過濾中</span>
           </div>
         `;
       }
